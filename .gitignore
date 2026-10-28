@@ -1,0 +1,8 @@
+__pycache__/
+.pytest_cache/
+.venv/
+.vscode/
+.idea/
+.DS_Store
+__MACOSX/
+.claude/settings.local.json

@@ -1,0 +1,16 @@
+from,to,minutes
+Entrance,HallA,3
+Entrance,Office,10
+HallA,HallB,0
+HallB,Stairs,2
+Stairs,Office,2
+HallA,Archive,4
+Office,Lab,2
+Stairs,Lab,4
+HallB,Lab,6
+Office,Roof,3
+Lab,Kitchen,1
+Kitchen,Lounge,1
+Lounge,Lab,1
+Observatory,Greenhouse,2
+Greenhouse,Observatory,2
