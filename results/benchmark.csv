@@ -1,0 +1,67 @@
+graph,task_id,start,goal,blocked_edges,required_visit,variant,heuristic,status,solution_cost,expanded_states,runtime_ms_median,runtime_ms_min,path_sequence
+graph1_brief_example,Task_1,S,G,,,UCS,zero,SUCCESS,7,5,0.007,0.0067,S -> A -> C -> G
+graph1_brief_example,Task_1,S,G,,,A* (h=0),zero,SUCCESS,7,5,0.007,0.0068,S -> A -> C -> G
+graph1_brief_example,Task_1,S,G,,,A* (Euclidean),zero,SUCCESS,7,5,0.007,0.0068,S -> A -> C -> G
+graph1_brief_example,Task_2,S,G,C>G,,UCS,zero,SUCCESS,7,5,0.0066,0.0063,S -> B -> G
+graph1_brief_example,Task_2,S,G,C>G,,A* (h=0),zero,SUCCESS,7,5,0.0066,0.0064,S -> B -> G
+graph1_brief_example,Task_2,S,G,C>G,,A* (Euclidean),zero,SUCCESS,7,5,0.0067,0.0065,S -> B -> G
+graph1_brief_example,Task_3,S,G,,C,UCS,zero,SUCCESS,7,5,0.0073,0.0072,S -> A -> C -> G
+graph1_brief_example,Task_3,S,G,,C,A* (h=0),zero,SUCCESS,7,5,0.0074,0.0072,S -> A -> C -> G
+graph1_brief_example,Task_3,S,G,,C,A* (Euclidean),zero,SUCCESS,7,5,0.0073,0.0072,S -> A -> C -> G
+graph1_brief_example,Task_4,S,G,,B,UCS,zero,SUCCESS,7,6,0.0075,0.0073,S -> B -> G
+graph1_brief_example,Task_4,S,G,,B,A* (h=0),zero,SUCCESS,7,6,0.0074,0.0072,S -> B -> G
+graph1_brief_example,Task_4,S,G,,B,A* (Euclidean),zero,SUCCESS,7,6,0.0075,0.0074,S -> B -> G
+graph1_brief_example,Task_5,S,G,A>G;B>G;C>G,,UCS,zero,NO_FEASIBLE_ROUTE,,4,0.0045,0.0043,
+graph1_brief_example,Task_5,S,G,A>G;B>G;C>G,,A* (h=0),zero,NO_FEASIBLE_ROUTE,,4,0.0045,0.0044,
+graph1_brief_example,Task_5,S,G,A>G;B>G;C>G,,A* (Euclidean),zero,NO_FEASIBLE_ROUTE,,4,0.0046,0.0044,
+graph1_brief_example,Task_6,G,S,,,UCS,zero,NO_FEASIBLE_ROUTE,,1,0.0009,0.0008,
+graph1_brief_example,Task_6,G,S,,,A* (h=0),zero,NO_FEASIBLE_ROUTE,,1,0.0009,0.0008,
+graph1_brief_example,Task_6,G,S,,,A* (Euclidean),zero,NO_FEASIBLE_ROUTE,,1,0.001,0.0009,
+graph1_brief_example,Task_7,S,C,,,UCS,zero,SUCCESS,4,3,0.0046,0.0045,S -> A -> C
+graph1_brief_example,Task_7,S,C,,,A* (h=0),zero,SUCCESS,4,3,0.0046,0.0045,S -> A -> C
+graph1_brief_example,Task_7,S,C,,,A* (Euclidean),zero,SUCCESS,4,3,0.0047,0.0045,S -> A -> C
+graph2_campus,Task_1,Gate,Workshop,,,UCS,zero,SUCCESS,17,11,0.0232,0.0213,Gate -> Library -> AILab -> PrintShop -> Workshop
+graph2_campus,Task_1,Gate,Workshop,,,A* (h=0),zero,SUCCESS,17,11,0.0215,0.0208,Gate -> Library -> AILab -> PrintShop -> Workshop
+graph2_campus,Task_1,Gate,Workshop,,,A* (Euclidean),euclidean,SUCCESS,17,9,0.0206,0.0203,Gate -> Library -> AILab -> PrintShop -> Workshop
+graph2_campus,Task_2,Gate,Workshop,PrintShop>Workshop,,UCS,zero,SUCCESS,18,11,0.021,0.0205,Gate -> Library -> AILab -> Workshop
+graph2_campus,Task_2,Gate,Workshop,PrintShop>Workshop,,A* (h=0),zero,SUCCESS,18,11,0.0212,0.0208,Gate -> Library -> AILab -> Workshop
+graph2_campus,Task_2,Gate,Workshop,PrintShop>Workshop,,A* (Euclidean),euclidean,SUCCESS,18,11,0.0234,0.0226,Gate -> Library -> AILab -> Workshop
+graph2_campus,Task_3,Gate,Workshop,,Canteen,UCS,zero,SUCCESS,19,18,0.0368,0.0359,Gate -> Rectorate -> Canteen -> Parking -> PrintShop -> Workshop
+graph2_campus,Task_3,Gate,Workshop,,Canteen,A* (h=0),zero,SUCCESS,19,18,0.0368,0.0361,Gate -> Rectorate -> Canteen -> Parking -> PrintShop -> Workshop
+graph2_campus,Task_3,Gate,Workshop,,Canteen,A* (Euclidean),euclidean,SUCCESS,19,14,0.0304,0.0301,Gate -> Rectorate -> Canteen -> Parking -> PrintShop -> Workshop
+graph2_campus,Task_4,DormA,AILab,,,UCS,zero,SUCCESS,14,9,0.0167,0.0164,DormA -> Gate -> Library -> AILab
+graph2_campus,Task_4,DormA,AILab,,,A* (h=0),zero,SUCCESS,14,9,0.0184,0.0167,DormA -> Gate -> Library -> AILab
+graph2_campus,Task_4,DormA,AILab,,,A* (Euclidean),euclidean,SUCCESS,14,7,0.0164,0.0161,DormA -> Gate -> Library -> AILab
+graph2_campus,Task_5,Workshop,SportsHall,,,UCS,zero,SUCCESS,16,9,0.0183,0.0179,Workshop -> PrintShop -> AILab -> Library -> SportsHall
+graph2_campus,Task_5,Workshop,SportsHall,,,A* (h=0),zero,SUCCESS,16,9,0.0183,0.0178,Workshop -> PrintShop -> AILab -> Library -> SportsHall
+graph2_campus,Task_5,Workshop,SportsHall,,,A* (Euclidean),euclidean,SUCCESS,16,5,0.0122,0.0117,Workshop -> PrintShop -> AILab -> Library -> SportsHall
+graph2_campus,Task_6,Gate,Workshop,Library>AILab;Aula>AILab,Rectorate,UCS,zero,SUCCESS,19,19,0.0365,0.0352,Gate -> Rectorate -> Aula -> Parking -> PrintShop -> Workshop
+graph2_campus,Task_6,Gate,Workshop,Library>AILab;Aula>AILab,Rectorate,A* (h=0),zero,SUCCESS,19,19,0.0356,0.035,Gate -> Rectorate -> Aula -> Parking -> PrintShop -> Workshop
+graph2_campus,Task_6,Gate,Workshop,Library>AILab;Aula>AILab,Rectorate,A* (Euclidean),euclidean,SUCCESS,19,13,0.0293,0.0285,Gate -> Rectorate -> Aula -> Parking -> PrintShop -> Workshop
+graph3_traps,Task_1,Entrance,Office,,,UCS,zero,SUCCESS,7,6,0.0082,0.008,Entrance -> HallA -> HallB -> Stairs -> Office
+graph3_traps,Task_1,Entrance,Office,,,A* (h=0),zero,SUCCESS,7,6,0.0082,0.008,Entrance -> HallA -> HallB -> Stairs -> Office
+graph3_traps,Task_1,Entrance,Office,,,A* (Euclidean),zero,SUCCESS,7,6,0.0083,0.0082,Entrance -> HallA -> HallB -> Stairs -> Office
+graph3_traps,Task_2,Entrance,Lab,,,UCS,zero,SUCCESS,9,7,0.0095,0.0094,Entrance -> HallA -> HallB -> Lab
+graph3_traps,Task_2,Entrance,Lab,,,A* (h=0),zero,SUCCESS,9,7,0.0096,0.0094,Entrance -> HallA -> HallB -> Lab
+graph3_traps,Task_2,Entrance,Lab,,,A* (Euclidean),zero,SUCCESS,9,7,0.0104,0.0095,Entrance -> HallA -> HallB -> Lab
+graph3_traps,Task_3,Entrance,Observatory,,,UCS,zero,NO_FEASIBLE_ROUTE,,10,0.0122,0.0119,
+graph3_traps,Task_3,Entrance,Observatory,,,A* (h=0),zero,NO_FEASIBLE_ROUTE,,10,0.0122,0.0119,
+graph3_traps,Task_3,Entrance,Observatory,,,A* (Euclidean),zero,NO_FEASIBLE_ROUTE,,10,0.0124,0.012,
+graph3_traps,Task_4,Office,Entrance,,,UCS,zero,NO_FEASIBLE_ROUTE,,5,0.0051,0.0049,
+graph3_traps,Task_4,Office,Entrance,,,A* (h=0),zero,NO_FEASIBLE_ROUTE,,5,0.0051,0.005,
+graph3_traps,Task_4,Office,Entrance,,,A* (Euclidean),zero,NO_FEASIBLE_ROUTE,,5,0.0052,0.005,
+graph3_traps,Task_5,Entrance,Lab,,Archive,UCS,zero,NO_FEASIBLE_ROUTE,,10,0.0128,0.0121,
+graph3_traps,Task_5,Entrance,Lab,,Archive,A* (h=0),zero,NO_FEASIBLE_ROUTE,,10,0.0122,0.012,
+graph3_traps,Task_5,Entrance,Lab,,Archive,A* (Euclidean),zero,NO_FEASIBLE_ROUTE,,10,0.0124,0.0121,
+graph3_traps,Task_6,Entrance,Lab,,Kitchen,UCS,zero,SUCCESS,12,11,0.0137,0.0135,Entrance -> HallA -> HallB -> Lab -> Kitchen -> Lounge -> Lab
+graph3_traps,Task_6,Entrance,Lab,,Kitchen,A* (h=0),zero,SUCCESS,12,11,0.0137,0.0134,Entrance -> HallA -> HallB -> Lab -> Kitchen -> Lounge -> Lab
+graph3_traps,Task_6,Entrance,Lab,,Kitchen,A* (Euclidean),zero,SUCCESS,12,11,0.0137,0.0134,Entrance -> HallA -> HallB -> Lab -> Kitchen -> Lounge -> Lab
+graph3_traps,Task_7,Entrance,Office,HallA>HallB,,UCS,zero,SUCCESS,10,4,0.0041,0.004,Entrance -> Office
+graph3_traps,Task_7,Entrance,Office,HallA>HallB,,A* (h=0),zero,SUCCESS,10,4,0.0041,0.004,Entrance -> Office
+graph3_traps,Task_7,Entrance,Office,HallA>HallB,,A* (Euclidean),zero,SUCCESS,10,4,0.0042,0.004,Entrance -> Office
+graph3_traps,Task_8,Entrance,Entrance,,,UCS,zero,SUCCESS,0,1,0.0009,0.0008,Entrance
+graph3_traps,Task_8,Entrance,Entrance,,,A* (h=0),zero,SUCCESS,0,1,0.0009,0.0008,Entrance
+graph3_traps,Task_8,Entrance,Entrance,,,A* (Euclidean),zero,SUCCESS,0,1,0.0009,0.0008,Entrance
+graph3_traps,Task_9,HallA,Roof,,HallA,UCS,zero,SUCCESS,7,7,0.009,0.0088,HallA -> HallB -> Stairs -> Office -> Roof
+graph3_traps,Task_9,HallA,Roof,,HallA,A* (h=0),zero,SUCCESS,7,7,0.009,0.0088,HallA -> HallB -> Stairs -> Office -> Roof
+graph3_traps,Task_9,HallA,Roof,,HallA,A* (Euclidean),zero,SUCCESS,7,7,0.0092,0.0088,HallA -> HallB -> Stairs -> Office -> Roof
