@@ -1,0 +1,7 @@
+start,goal,blocked_edges,required_visit
+Gate,Workshop,,
+Gate,Workshop,PrintShop>Workshop,
+Gate,Workshop,,Canteen
+DormA,AILab,,
+Workshop,SportsHall,,
+Gate,Workshop,Library>AILab;Aula>AILab,Rectorate

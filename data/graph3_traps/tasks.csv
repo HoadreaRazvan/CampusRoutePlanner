@@ -1,0 +1,10 @@
+start,goal,blocked_edges,required_visit
+Entrance,Office,,
+Entrance,Lab,,
+Entrance,Observatory,,
+Office,Entrance,,
+Entrance,Lab,,Archive
+Entrance,Lab,,Kitchen
+Entrance,Office,HallA>HallB,
+Entrance,Entrance,,
+HallA,Roof,,HallA
