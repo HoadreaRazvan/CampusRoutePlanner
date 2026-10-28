@@ -15,7 +15,8 @@ Claude Code (Anthropic), used from the terminal inside this repository.
 | Search | `src/search/` | Shared best-first core, UCS, A*, heuristic consistency check and fallback. |
 | Tests and sample data | `tests/`, `data/custom/` | Test suite, invalid sample CSVs, custom edge-case maps. |
 | CLI and benchmark | `src/cli.py`, `src/planner.py`, `experiments/` | Command-line interface and UCS vs A* comparison. |
-| Documentation | `docs/analysis.md`, `docs/decision_log.md` (ADR-04 to ADR-10), `README.md` | First drafts. |
+| Graphical interface | `src/gui/` | Local web app: search replay, race mode, interactive requests, file drop. |
+| Documentation | `docs/analysis.md`, `docs/decision_log.md` (ADR-04 to ADR-11), `README.md` | First drafts. |
 
 ## How the output was checked
 
@@ -28,6 +29,8 @@ Claude Code (Anthropic), used from the terminal inside this repository.
   `graph2_campus`; consistency checked on every edge.
 - **A\* with h = 0 versus UCS:** identical path, cost and expanded states on every request.
 - **Invalid input:** each sample file in `tests/fixtures/` must produce its specific error code.
+- **GUI:** the API is tested directly and through the running server (`tests/test_gui.py`); the replay
+  length must equal the reported expanded states. The pages were checked with headless-browser screenshots.
 - One mistake was caught by the tests this way: the plan stated that `graph3_traps` has 11 buildings;
   it has 12.
 - Every change goes through a pull request reviewed by another team member.

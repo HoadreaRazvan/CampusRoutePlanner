@@ -65,3 +65,10 @@
 * **Context:** Single timings below one millisecond are dominated by noise.
 * **Decision:** `runtime_ms` is measured with `time.perf_counter()` inside the search (loading and validation excluded). The benchmark reports the median of 50 runs after 2 warm-up runs.
 * **Consequences:** Runtimes are comparable between algorithms within one run on one machine; expanded states remain the main measure of search effort.
+
+## ADR-11: Graphical Interface as a Local Web App
+* **Status:** Accepted
+* **Context:** The demonstration should make the search visible (expanded states, the two layers of the composite state, UCS vs A*), and it must run on any machine, including on an unseen graph, without installing anything.
+* **Alternatives:** Tkinter (no dependencies, but limited visuals); a web framework such as Flask (extra dependency).
+* **Decision:** `python -m src.gui` starts a small server from the Python standard library (`http.server`), bound to `127.0.0.1` only, serving one HTML/CSS/JS page with no external assets. The page calls a JSON API that reuses the same loader and search code as the CLI. The search core accepts an optional `trace` list so the GUI can replay expansions in order; the algorithms and their results are unchanged.
+* **Consequences:** No new dependency and no internet needed. The GUI cannot show anything the search did not do: the replay is the recorded expansion order. Files dropped into the page are written to a temporary folder and validated by the same loader.
