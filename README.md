@@ -62,6 +62,8 @@ Invalid input is rejected with a clear message, never silently accepted: missing
 "No route exists" is a valid answer, not an error.
 
 How to contribute
+Branch → pull request → review by another member → merge. Never push directly to `main`.
+With Claude Code, type `/commit` in this folder and it guides you step by step.
+Type `/git-guide` to see the commands for getting the latest code, opening a pull request
+and reviewing one.
 
-Branch → pull request → review by another member → merge. Never push directly to main.
-With Claude Code, type /commit in this folder and it guides you step by step.
