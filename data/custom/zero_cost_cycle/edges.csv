@@ -1,0 +1,6 @@
+from,to,minutes
+A,B,0
+B,C,0
+C,A,0
+C,D,2
+A,E,5
