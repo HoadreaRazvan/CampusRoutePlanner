@@ -1,0 +1,7 @@
+start,goal,blocked_edges,required_visit
+A,D,,
+A,D,B>C,
+D,A,,
+A,X,,
+A,D,,C
+A,B,,D

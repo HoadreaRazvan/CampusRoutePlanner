@@ -1,0 +1,6 @@
+from,to,minutes
+Home,Hub,1
+Hub,Home,1
+Hub,Store,2
+Store,Hub,2
+Hub,Office,3

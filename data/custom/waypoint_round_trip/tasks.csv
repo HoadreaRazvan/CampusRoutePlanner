@@ -1,0 +1,6 @@
+start,goal,blocked_edges,required_visit
+Home,Home,,Store
+Home,Office,,Store
+Home,Office,,Office
+Home,Office,,Home
+Home,Office,Hub>Store,Store
