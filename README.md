@@ -26,9 +26,34 @@ Python 3.10+, no dependencies besides `pytest`.
 python -m venv .venv
 # Windows: .venv\Scripts\activate    Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
-python -m pytest                          # 147 tests
+python -m pytest                          # 159 tests
 python -m src.cli data/graph2_campus      # run every request of a graph with UCS and A*
+python -m src.gui                         # graphical interface in the browser
 ```
+
+## Graphical interface
+
+```bash
+python -m src.gui                          # opens http://127.0.0.1:8765 in the browser
+python -m src.gui path/to/unseen_graph     # opens that graph folder first
+python -m src.gui --port 9000 --no-browser
+```
+
+A local web app (Python standard library server + plain HTML/CSS/JS, no internet needed):
+
+- **Live replay of the search**: every expanded state lights up in order. Each building has two rings,
+  one per search state: violet = `(building, stop not yet visited)`, cyan = `(building, stop visited)`.
+- **Race mode**: UCS and A* side by side on the same request, with expanded-state counters.
+- **Interactive requests**: pick start / goal / required stop from the lists or on the map
+  (click = goal, Shift+click = start, Alt+click = stop); click an edge to close it.
+- **Heuristic safety check, live**: move the `v_max` slider below the fastest edge in the data
+  (79.4 m/min in `graph2_campus`) and A* visibly falls back to `h = 0`.
+- **Unseen graphs**: drop a folder or the CSV files onto the page, or use *Open folder…*. Maps without
+  coordinates are laid out automatically; buildings can be dragged.
+- Results panel with cost, expanded states and runtime for both algorithms; light and dark theme.
+- Keyboard: `Space` play/pause, `←`/`→` step, `Home`/`End`, `1`/`2`/`3` switch A* / UCS / Race.
+- Demo links: `http://127.0.0.1:8765/?view=race&start=Gate&goal=Workshop&required=Canteen#graph2_campus`
+  (also `blocked=A>B;C>D`, `vmax=70`, `theme=light`).
 
 ## Running the planner
 
@@ -122,6 +147,7 @@ same costs everywhere, 77 expanded states with UCS vs 59 with A*. Discussion in
 | `src/search/` | `BaseSearchAlgorithm`, shared best-first core, UCS, A*, heuristics. |
 | `src/planner.py` | Runs requests and formats results; shared by the CLI and the benchmark. |
 | `src/cli.py` | Command-line interface. |
+| `src/gui/` | Web interface: local server (`server.py`), JSON API (`api.py`), page (`static/`). |
 | `experiments/` | UCS vs A* benchmark script. |
 | `results/` | Benchmark results. |
 | `data/` | Provided graphs (`graph1`–`graph3`) and our edge-case maps (`data/custom/`). |

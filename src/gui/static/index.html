@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Campus Route Planner</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' y1='0' x2='1' y2='1'%3E%3Cstop offset='0' stop-color='%2334d399'/%3E%3Cstop offset='.5' stop-color='%2322d3ee'/%3E%3Cstop offset='1' stop-color='%23a78bfa'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='9' fill='%230b1120'/%3E%3Cpath d='M8 23 C 12 10, 20 22, 24 9' stroke='url(%23g)' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='8' cy='23' r='3' fill='%2334d399'/%3E%3Ccircle cx='24' cy='9' r='3' fill='%23fb7185'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+
+  <div class="app">
+    <aside class="sidebar">
+      <header class="brand">
+        <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+          <defs>
+            <linearGradient id="logoGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#34d399"/><stop offset=".5" stop-color="#22d3ee"/><stop offset="1" stop-color="#a78bfa"/>
+            </linearGradient>
+          </defs>
+          <path d="M8 23 C 12 10, 20 22, 24 9" stroke="url(#logoGrad)" stroke-width="3" fill="none" stroke-linecap="round"/>
+          <circle cx="8" cy="23" r="3.2" fill="#34d399"/><circle cx="24" cy="9" r="3.2" fill="#fb7185"/>
+        </svg>
+        <div>
+          <h1>Campus Route Planner</h1>
+          <p>Constraint-aware search · UCS &amp; A*</p>
+        </div>
+      </header>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Map</h2>
+          <button id="openFolder" class="ghost small" type="button">Open folder…</button>
+        </div>
+        <div class="select-wrap"><select id="dataset" aria-label="Graph"></select></div>
+        <p id="datasetMeta" class="meta"></p>
+        <p class="hint">Drop a graph folder or CSV files anywhere on the page to load it.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head">
+          <h2>Request</h2>
+          <div class="head-actions">
+            <button id="swap" class="ghost small" type="button" title="Swap start and goal">⇄ Swap</button>
+            <button id="reset" class="ghost small" type="button" title="Remove stop and closures">Reset</button>
+          </div>
+        </div>
+        <div class="slot">
+          <span class="slot-dot start"></span><label for="start">Start</label>
+          <div class="select-wrap"><select id="start"></select></div>
+          <button class="pick" data-pick="start" type="button" title="Pick the start on the map">◎</button>
+        </div>
+        <div class="slot">
+          <span class="slot-dot stop"></span><label for="required">Required stop</label>
+          <div class="select-wrap"><select id="required"></select></div>
+          <button class="pick" data-pick="required" type="button" title="Pick the required stop on the map">◎</button>
+        </div>
+        <div class="slot">
+          <span class="slot-dot goal"></span><label for="goal">Goal</label>
+          <div class="select-wrap"><select id="goal"></select></div>
+          <button class="pick" data-pick="goal" type="button" title="Pick the goal on the map">◎</button>
+        </div>
+        <div class="closures">
+          <div class="row">
+            <span class="label">Closed edges</span>
+            <button id="clearBlocked" class="ghost small" type="button">Clear</button>
+          </div>
+          <div id="blockedList" class="chips"></div>
+        </div>
+        <p class="hint keys"><kbd>Click</kbd> goal · <kbd>Shift</kbd>+click start · <kbd>Alt</kbd>+click stop · click an edge to close it</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head"><h2>Heuristic</h2><span id="heuristicBadge" class="badge"></span></div>
+        <label class="slider-label" for="vmax">
+          <span>Fastest walking speed <i>v</i><sub>max</sub></span>
+          <output id="vmaxOut">80 m/min</output>
+        </label>
+        <input type="range" id="vmax" min="20" max="200" step="1" value="80">
+        <p id="heuristicStatus" class="status-line"></p>
+      </section>
+
+      <section class="card tasks">
+        <div class="card-head"><h2>Requests from tasks.csv</h2><span id="taskCount" class="badge"></span></div>
+        <div id="taskList" class="task-list"></div>
+      </section>
+    </aside>
+
+    <main class="stage">
+      <div class="toolbar">
+        <div class="segmented" id="viewSwitch" role="tablist" aria-label="View">
+          <button data-view="astar" type="button" role="tab">A*</button>
+          <button data-view="ucs" type="button" role="tab">UCS</button>
+          <button data-view="race" type="button" role="tab">Race ⚡</button>
+          <span class="seg-glider" aria-hidden="true"></span>
+        </div>
+        <div class="toolbar-right">
+          <label class="toggle"><input type="checkbox" id="showH"><span>h(n)</span></label>
+          <label class="toggle"><input type="checkbox" id="showWeights" checked><span>minutes</span></label>
+          <button id="relayout" class="icon" type="button" title="Reset the layout">⟲</button>
+          <button id="theme" class="icon" type="button" title="Light / dark">◐</button>
+        </div>
+      </div>
+
+      <div id="maps" class="maps"></div>
+
+      <div class="timeline">
+        <button id="play" class="play" type="button" title="Play / pause (Space)">▶</button>
+        <div class="scrub-wrap">
+          <input type="range" id="scrub" min="0" max="0" value="0" aria-label="Expansion step">
+          <div class="scrub-caption"><span id="stepLabel">0 / 0</span><span class="faint">expanded states, in order</span></div>
+        </div>
+        <div class="speed" role="group" aria-label="Speed">
+          <button data-speed="0.5" type="button">½×</button>
+          <button data-speed="1" type="button" class="active">1×</button>
+          <button data-speed="2" type="button">2×</button>
+          <button data-speed="4" type="button">4×</button>
+        </div>
+        <button id="skip" class="icon" type="button" title="Jump to the result (End)">⏭</button>
+      </div>
+
+      <div id="results" class="results"></div>
+    </main>
+  </div>
+
+  <div id="dropzone" class="dropzone" aria-hidden="true">
+    <div class="drop-card">
+      <div class="drop-icon">⇣</div>
+      <strong>Drop a graph</strong>
+      <span>a folder, or edges.csv (+ nodes.csv, tasks.csv)</span>
+    </div>
+  </div>
+
+  <dialog id="openDialog">
+    <form method="dialog">
+      <h3>Open a graph folder</h3>
+      <p class="hint">A folder on this computer with <code>edges.csv</code> and optionally <code>nodes.csv</code> and <code>tasks.csv</code>.</p>
+      <input id="folderPath" type="text" placeholder="C:\path\to\graph_folder" autocomplete="off" spellcheck="false">
+      <div class="dialog-actions">
+        <button value="cancel" class="ghost" type="submit">Cancel</button>
+        <button value="open" class="primary" type="submit">Open</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="edgeMenu" class="edge-menu" hidden></div>
+  <div id="tooltip" class="tooltip" hidden></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
