@@ -1,0 +1,1594 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Campus Route Planner</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+/* Layout: a night survey map of the campus. Each scene is one "station" on a transit line (left rail);
+   the search's own encoding drives the palette: violet = stop pending, cyan = stop done, amber = the route, coral = closed. */
+:root {
+  --ink: #070a14;
+  --ink-2: #0b1020;
+  --ink-3: #121a31;
+  --rule: rgba(150, 168, 210, .13);
+  --rule-2: rgba(150, 168, 210, .28);
+  --fg: #e8ecf6;
+  --muted: #929db5;
+  --faint: #5f6a85;
+  --violet: #a78bfa;
+  --cyan: #22d3ee;
+  --amber: #fbbf24;
+  --coral: #fb7185;
+  --ucs: #7488e6;
+  --astar: #1fae7a;
+  --edge: rgba(150, 168, 210, .38);
+  --node: #0e1630;
+  --node-stroke: rgba(226, 232, 240, .55);
+  --display: "Big Shoulders Display", "Oswald", "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
+  --body: "Hanken Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono", "Cascadia Code", "SF Mono", Consolas, monospace;
+  --rail: 208px;
+  --ease: cubic-bezier(.2, .8, .2, 1);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html { scroll-snap-type: y proximity; scroll-behavior: smooth; background: var(--ink); }
+body {
+  background: var(--ink);
+  color: var(--fg);
+  font: 400 17px/1.55 var(--body);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(1100px 700px at 85% -10%, rgba(34, 211, 238, .07), transparent 60%),
+    radial-gradient(900px 600px at -10% 110%, rgba(167, 139, 250, .08), transparent 60%),
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: auto, auto, 56px 56px, 56px 56px;
+  background-attachment: fixed;
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--ink); }
+::selection { background: rgba(251, 191, 36, .35); }
+a { color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; border-radius: 4px; }
+.mono { font-family: var(--mono); }
+.num { font-variant-numeric: tabular-nums; }
+code { font-family: var(--mono); font-size: .88em; color: var(--fg); background: rgba(150, 168, 210, .1); padding: .08em .38em; border-radius: 5px; }
+
+/* ---------- transit-line rail ---------- */
+.rail {
+  position: fixed; inset: 0 auto 0 0; width: var(--rail); z-index: 20;
+  padding: calc(40px + env(safe-area-inset-top, 0px)) 0 32px max(24px, env(safe-area-inset-left, 0px));
+  display: flex; flex-direction: column; gap: 22px;
+  background: linear-gradient(90deg, rgba(7, 10, 20, .92) 70%, transparent);
+}
+.rail .brand { font: 800 15px/1.05 var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); }
+.rail .brand span { display: block; color: var(--muted); font: 500 11px/1.4 var(--mono); letter-spacing: .04em; text-transform: none; margin-top: 6px; }
+.rail ol { list-style: none; margin: 0; padding: 0; position: relative; display: flex; flex-direction: column; gap: 0; }
+.rail ol::before { content: ""; position: absolute; left: 6px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--rule-2); }
+.rail .progress { position: absolute; left: 6px; top: 10px; width: 3px; border-radius: 3px; background: var(--amber); height: 0; transition: height .5s var(--ease); }
+.rail a { position: relative; display: flex; align-items: center; gap: 14px; padding: 5px 0; text-decoration: none; color: var(--faint); font: 500 13px/1.2 var(--body); transition: color .2s; }
+.rail a:hover { color: var(--fg); }
+.rail .dot { width: 15px; height: 15px; flex: none; border-radius: 50%; background: var(--ink); border: 3px solid var(--rule-2); transition: border-color .3s, background .3s, transform .3s var(--ease); position: relative; z-index: 1; }
+.rail a.past .dot { border-color: var(--amber); background: var(--amber); }
+.rail a.past { color: var(--muted); }
+.rail a.here { color: var(--fg); font-weight: 700; }
+.rail a.here .dot { border-color: var(--amber); background: var(--ink); transform: scale(1.35); box-shadow: 0 0 0 5px rgba(251, 191, 36, .16); }
+.rail .rno { font: 500 10px var(--mono); color: var(--faint); width: 18px; }
+.rail .hint { margin-top: auto; font: 400 11px/1.6 var(--mono); color: var(--faint); }
+.rail kbd, .hint kbd { font: 500 10px var(--mono); border: 1px solid var(--rule-2); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+
+/* ---------- dock ---------- */
+.dock {
+  position: fixed; z-index: 30; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  display: flex; align-items: center; gap: 4px; padding: 5px;
+  background: rgba(11, 16, 32, .86); backdrop-filter: blur(10px); border: 1px solid var(--rule-2); border-radius: 999px;
+}
+.dock button { appearance: none; border: 0; background: transparent; color: var(--fg); width: 38px; height: 38px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; }
+.dock button:hover { background: rgba(150, 168, 210, .14); }
+.dock svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.dock .count { font: 500 12px var(--mono); color: var(--muted); padding: 0 6px; min-width: 64px; text-align: center; }
+.dock .count b { color: var(--fg); font-weight: 700; }
+
+/* ---------- scenes ---------- */
+main { margin-left: var(--rail); }
+.scene {
+  min-height: 100vh; min-height: 100dvh;
+  padding-block: clamp(64px, 9vh, 104px);
+  padding-left: max(28px, env(safe-area-inset-left, 0px));
+  padding-right: max(28px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; justify-content: center;
+  scroll-snap-align: start;
+  position: relative;
+}
+.scene + .scene { border-top: 1px solid var(--rule); }
+.wrap { width: 100%; max-width: 1280px; margin-inline: auto; display: flex; flex-direction: column; gap: clamp(28px, 4vh, 44px); }
+.sh { display: flex; flex-direction: column; gap: 12px; max-width: 980px; }
+.eyebrow { margin: 0; font: 500 12.5px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--amber); display: flex; gap: 12px; align-items: center; }
+.eyebrow .no { color: var(--ink); background: var(--amber); padding: 4px 7px; border-radius: 4px; letter-spacing: .04em; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h2 { font: 800 clamp(42px, 5.6vw, 82px)/.92 var(--display); text-transform: uppercase; letter-spacing: .005em; }
+h3 { font: 800 25px/1.05 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.lede { margin: 0; font-size: clamp(18px, 1.55vw, 21px); line-height: 1.5; color: var(--muted); max-width: 68ch; }
+.lede strong, p strong, li strong { color: var(--fg); font-weight: 600; }
+.grid-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: clamp(24px, 3vw, 48px); align-items: start; }
+.grid-2 > *, .grid-3 > * { min-width: 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.panel { background: rgba(11, 16, 32, .78); border: 1px solid var(--rule-2); border-radius: 16px; }
+.label { font: 500 11.5px/1.2 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+.list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 14px; }
+.list li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; color: var(--muted); }
+.list li::before { content: ""; width: 10px; height: 10px; margin-top: 8px; border-radius: 50%; border: 2px solid var(--amber); }
+.chip { display: inline-flex; align-items: center; gap: 7px; font: 500 12px/1 var(--mono); padding: 6px 10px; border-radius: 999px; border: 1px solid var(--rule-2); color: var(--muted); white-space: nowrap; }
+.chip .sw { width: 9px; height: 9px; border-radius: 50%; }
+.sw.v { background: var(--violet); } .sw.c { background: var(--cyan); } .sw.a { background: var(--amber); } .sw.r { background: var(--coral); }
+.sw.u { background: var(--ucs); } .sw.s { background: var(--astar); }
+.chip.warn { color: var(--coral); border-color: rgba(251, 113, 133, .5); }
+.chip.ok { color: var(--astar); border-color: rgba(31, 174, 122, .5); }
+
+/* ---------- map ---------- */
+.map { width: 100%; height: auto; display: block; overflow: visible; }
+.mapcard { position: relative; padding: 14px; background:
+  radial-gradient(700px 400px at 20% 0%, rgba(34, 211, 238, .06), transparent 60%),
+  radial-gradient(600px 400px at 100% 100%, rgba(167, 139, 250, .07), transparent 60%), rgba(11, 16, 32, .82); }
+.m-edge { stroke: var(--edge); stroke-width: 2.2; stroke-linecap: round; }
+.m-edge.blocked { stroke: var(--coral); stroke-dasharray: 7 7; stroke-width: 2.6; }
+.m-hit { stroke: transparent; stroke-width: 22; cursor: pointer; }
+.m-hit:hover + .m-edge, .m-edge.hover { stroke: var(--fg); }
+.m-elabel { font: 500 12.5px var(--mono); fill: var(--muted); text-anchor: middle; dominant-baseline: middle; paint-order: stroke; stroke: var(--ink-2); stroke-width: 6px; pointer-events: none; }
+.m-elabel.blocked { fill: var(--coral); }
+.m-core { fill: var(--node); stroke: var(--node-stroke); stroke-width: 1.6; transition: fill .2s; }
+.m-name { font: 600 14px var(--body); fill: var(--fg); text-anchor: middle; paint-order: stroke; stroke: var(--ink-2); stroke-width: 6px; pointer-events: none; }
+.m-ring { fill: none; stroke-width: 3.2; opacity: 0; transition: opacity .25s, r .25s; }
+.m-ring.f { stroke: var(--violet); } .m-ring.t { stroke: var(--cyan); }
+.m-ring.on { opacity: 1; }
+.m-node.cur .m-core { fill: var(--fg); }
+.m-node.is-req .m-core { fill: rgba(251, 191, 36, .25); stroke: var(--amber); stroke-width: 2.4; }
+.m-node.is-start .m-core, .m-node.is-goal .m-core { stroke: var(--fg); stroke-width: 2.6; }
+.m-tag { font: 700 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; text-anchor: middle; pointer-events: none; }
+.m-tag.start, .m-tag.goal { fill: var(--fg); } .m-tag.req { fill: var(--amber); }
+.m-route-glow { fill: none; stroke: var(--amber); stroke-opacity: .22; stroke-width: 14; stroke-linecap: round; stroke-linejoin: round; }
+.m-route { fill: none; stroke: var(--amber); stroke-width: 4.2; stroke-linecap: round; stroke-linejoin: round; }
+.m-route.draw { stroke-dasharray: var(--len); stroke-dashoffset: var(--len); animation: draw 1.4s var(--ease) forwards; }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.m-agent { fill: var(--amber); }
+.m-agent-halo { fill: var(--amber); opacity: .25; }
+.arrowhead { fill: var(--edge); }
+.arrowhead.blocked { fill: var(--coral); }
+
+/* ---------- hero ---------- */
+#start .wrap { gap: 32px; }
+.hero { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(24px, 3.5vw, 56px); align-items: center; }
+.hero > * { min-width: 0; }
+h1 { font: 900 clamp(60px, 8.4vw, 136px)/.84 var(--display); text-transform: uppercase; letter-spacing: -.005em; }
+h1 .amp { color: var(--amber); }
+h1 .thin { font-weight: 600; color: var(--muted); }
+.hero .lede { margin-top: 22px; }
+.ticket { position: static; margin-top: 10px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 12px 14px; border-radius: 10px; background: rgba(7, 10, 20, .88); border: 1px dashed var(--rule-2); font: 500 12px/1.45 var(--mono); color: var(--muted); }
+.ticket b { color: var(--fg); font-weight: 600; }
+.ticket .ttl { flex-basis: 100%; color: var(--amber); letter-spacing: .14em; text-transform: uppercase; font-size: 11px; }
+.ticket b + span { margin-left: 12px; }
+.facts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--rule-2); }
+.facts div { padding: 18px 18px 4px 0; display: flex; flex-direction: column; gap: 4px; }
+.facts div + div { padding-left: 18px; border-left: 1px solid var(--rule); }
+.facts b { font: 800 clamp(40px, 4.4vw, 64px)/.9 var(--display); color: var(--fg); font-variant-numeric: tabular-nums; }
+.facts span { font-size: 14px; color: var(--muted); }
+.byline { display: flex; flex-wrap: wrap; gap: 8px 24px; font: 400 13px/1.4 var(--mono); color: var(--faint); }
+
+/* ---------- problem ---------- */
+.tasks { display: flex; flex-wrap: wrap; gap: 8px; }
+.tbtn { appearance: none; cursor: pointer; font: 500 12.5px/1 var(--mono); color: var(--muted); background: transparent; border: 1px solid var(--rule-2); border-radius: 8px; padding: 9px 11px; transition: border-color .2s, color .2s, background .2s; }
+.tbtn:hover { color: var(--fg); border-color: var(--muted); }
+.tbtn[aria-pressed="true"] { color: var(--ink); background: var(--amber); border-color: var(--amber); }
+.result { font: 500 14px/1.5 var(--mono); color: var(--muted); padding: 14px 16px; border-radius: 10px; background: rgba(7, 10, 20, .7); border: 1px solid var(--rule); min-height: 74px; }
+.result b { color: var(--fg); font-weight: 600; }
+.result .bad { color: var(--coral); font-weight: 700; }
+.result .good { color: var(--amber); font-weight: 700; }
+.boundary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; padding: 16px 18px; border-left: 3px solid var(--coral); background: rgba(251, 113, 133, .06); border-radius: 0 10px 10px 0; color: var(--muted); font-size: 15.5px; }
+.boundary b { color: var(--coral); font: 700 11px/1.9 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
+
+/* ---------- formulation ---------- */
+.spec { border-collapse: collapse; width: 100%; }
+.spec th, .spec td { text-align: left; vertical-align: top; padding: 18px 20px 18px 0; border-top: 1px solid var(--rule); }
+.spec tr:first-child th, .spec tr:first-child td { border-top-color: var(--rule-2); }
+.spec th { font: 800 26px/1 var(--display); text-transform: uppercase; letter-spacing: .02em; width: 18%; white-space: nowrap; }
+.spec td.q { color: var(--muted); width: 28%; font-size: 15.5px; }
+.spec td.a { font: 500 15.5px/1.5 var(--mono); color: var(--fg); }
+.spec td.a em { font-style: normal; color: var(--amber); }
+.spec td.a small { display: block; font: 400 14px/1.5 var(--body); color: var(--muted); margin-top: 4px; }
+.tablebox { overflow-x: auto; }
+.tablebox > table { min-width: 720px; }
+
+/* ---------- 3D state space ---------- */
+.stage { position: relative; touch-action: none; cursor: grab; user-select: none; }
+.stage:active { cursor: grabbing; }
+.stage svg { width: 100%; height: auto; display: block; }
+.p-plane { stroke-width: 1.2; }
+.p-plane.f { fill: rgba(167, 139, 250, .07); stroke: rgba(167, 139, 250, .45); }
+.p-plane.t { fill: rgba(34, 211, 238, .06); stroke: rgba(34, 211, 238, .45); }
+.p-edge { stroke-linecap: round; }
+.p-edge.f { stroke: rgba(167, 139, 250, .38); } .p-edge.t { stroke: rgba(34, 211, 238, .38); }
+.p-stem { stroke: rgba(150, 168, 210, .22); stroke-dasharray: 3 5; }
+.p-node.f { fill: var(--ink-2); stroke: var(--violet); } .p-node.t { fill: var(--ink-2); stroke: var(--cyan); }
+.p-name { font-family: var(--body); font-weight: 600; fill: var(--muted); text-anchor: middle; paint-order: stroke; stroke: var(--ink); stroke-width: 4px; }
+.p-route { fill: none; stroke: var(--amber); stroke-linecap: round; stroke-linejoin: round; }
+.p-jump { fill: none; stroke: var(--amber); stroke-dasharray: 2 7; stroke-linecap: round; }
+.p-tag { font: 700 13px var(--mono); paint-order: stroke; stroke: var(--ink); stroke-width: 5px; text-anchor: middle; }
+.p-tag.f { fill: var(--violet); } .p-tag.t { fill: var(--cyan); }
+.p-layer { font: 700 12px var(--mono); letter-spacing: .12em; }
+.p-layer.f { fill: var(--violet); } .p-layer.t { fill: var(--cyan); }
+.readout { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--rule-2); border-radius: 12px; overflow: hidden; }
+.readout div { padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.readout div + div { border-left: 1px solid var(--rule); }
+.readout b { font: 600 17px/1.2 var(--mono); color: var(--fg); font-variant-numeric: tabular-nums; }
+.readout b.flag-t { color: var(--cyan); } .readout b.flag-f { color: var(--violet); }
+.wrong { padding: 16px 18px; border-radius: 12px; border: 1px dashed rgba(251, 113, 133, .5); color: var(--muted); font-size: 15.5px; }
+.wrong b { color: var(--coral); }
+.stagehint { position: absolute; right: 14px; top: 12px; font: 500 11px var(--mono); color: var(--faint); letter-spacing: .08em; text-transform: uppercase; pointer-events: none; }
+
+/* ---------- algorithms ---------- */
+.algos { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: clamp(20px, 3vw, 40px); align-items: start; }
+.algos > * { min-width: 0; }
+.alg { padding: 22px 22px 20px; display: flex; flex-direction: column; gap: 12px; }
+.alg + .alg { margin-top: 16px; }
+.alg .f { font: 800 52px/1 var(--display); letter-spacing: .01em; }
+.alg.ucs .f { color: var(--ucs); } .alg.as .f { color: var(--astar); }
+.alg dl { margin: 0; display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 8px 14px; font-size: 15px; }
+.alg dt { font: 500 11px/1.9 var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+.alg dd { margin: 0; color: var(--muted); }
+.eq { padding: 14px 18px; border-radius: 12px; border: 1px solid var(--rule-2); font: 500 15px/1.5 var(--mono); color: var(--muted); margin-top: 16px; }
+.eq b { color: var(--fg); }
+.code { margin: 0; padding: 20px 0; overflow-x: auto; font: 400 13.6px/1.72 var(--mono); color: #c6cee0; counter-reset: ln; }
+.code .ln { display: block; padding: 0 20px 0 0; white-space: pre; position: relative; }
+.code .ln::before { counter-increment: ln; content: counter(ln); display: inline-block; width: 42px; padding-right: 14px; text-align: right; color: var(--faint); }
+.code .ln.hl { background: rgba(251, 191, 36, .08); box-shadow: inset 3px 0 var(--amber); }
+.code .k { color: #c4a7ff; } .code .c { color: #6c7894; font-style: italic; } .code .s { color: #f9c97a; } .code .n { color: #7ee2c8; } .code .fn { color: #8fc0ff; }
+.code .badge { display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; background: var(--amber); color: var(--ink); font: 700 11px var(--mono); margin-left: 8px; vertical-align: 1px; }
+.codehead { display: flex; justify-content: space-between; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--rule); font: 500 12px var(--mono); color: var(--faint); flex-wrap: wrap; }
+.notes { list-style: none; margin: 0; padding: 16px 18px 18px; border-top: 1px solid var(--rule); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; font-size: 14.5px; color: var(--muted); }
+.notes li { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; }
+.notes i { font-style: normal; display: grid; place-items: center; width: 19px; height: 19px; border-radius: 50%; background: var(--amber); color: var(--ink); font: 700 11px var(--mono); margin-top: 2px; }
+
+/* ---------- race ---------- */
+.controls { display: flex; flex-wrap: wrap; gap: 12px 14px; align-items: end; padding: 14px 16px; }
+.field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.field label { font: 500 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
+select, .btn { font: 500 13.5px var(--mono); color: var(--fg); background: var(--ink-2); border: 1px solid var(--rule-2); border-radius: 8px; padding: 9px 11px; min-height: 40px; }
+select { max-width: 100%; cursor: pointer; }
+.btn { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--amber); color: var(--ink); border-color: var(--amber); font-weight: 700; }
+.btn svg { width: 15px; height: 15px; fill: currentColor; }
+.ctl-sep { flex: 1 1 0; }
+.blockedlist { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-height: 40px; }
+.blockedlist .chip { color: var(--coral); border-color: rgba(251, 113, 133, .45); cursor: pointer; background: transparent; }
+.blockedlist .none { font: 400 13px var(--mono); color: var(--faint); }
+.arena { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+.lane { padding: 0; overflow: hidden; display: flex; flex-direction: column; }
+.lane-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+.lane-head h3 { display: flex; align-items: center; gap: 10px; font-size: 24px; }
+.lane-head h3 .sw { width: 11px; height: 11px; border-radius: 3px; }
+.lane .map { padding: 6px 10px; }
+.counter { font: 800 44px/1 var(--display); font-variant-numeric: tabular-nums; }
+.counter small { font: 500 11px var(--mono); color: var(--faint); letter-spacing: .1em; text-transform: uppercase; margin-left: 6px; }
+.lane-foot { margin-top: auto; padding: 12px 16px; border-top: 1px solid var(--rule); font: 500 13px/1.5 var(--mono); color: var(--muted); min-height: 72px; }
+.lane-foot b { color: var(--fg); }
+.lane-foot .cur { color: var(--faint); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- heuristic ---------- */
+.proof { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.formula { font: 500 clamp(16px, 1.45vw, 20px)/1.4 var(--mono); color: var(--fg); }
+.formula em { font-style: normal; color: var(--amber); }
+.proof p { margin: 0; color: var(--muted); font-size: 15.5px; }
+.proof .step { font: 500 14.5px/1.6 var(--mono); color: var(--fg); padding: 10px 14px; border-radius: 8px; background: rgba(7, 10, 20, .65); border: 1px solid var(--rule); overflow-x: auto; }
+.slider { display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; }
+.slider-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.vmax-val { font: 800 46px/1 var(--display); font-variant-numeric: tabular-nums; }
+.vmax-val small { font: 500 12px var(--mono); color: var(--muted); margin-left: 4px; }
+input[type="range"] { width: 100%; accent-color: var(--amber); height: 28px; cursor: pointer; }
+.hstats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.hstats div { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--rule); display: flex; flex-direction: column; gap: 4px; }
+.hstats b { font: 800 34px/1 var(--display); font-variant-numeric: tabular-nums; }
+.hstats .u b { color: var(--ucs); } .hstats .s b { color: var(--astar); }
+.chartbox { overflow-x: auto; }
+.chartbox svg { display: block; width: 100%; min-width: 520px; height: auto; }
+.ax { font: 400 12px var(--mono); fill: var(--faint); }
+.ax-line { stroke: var(--rule); }
+.bar { fill: rgba(150, 168, 210, .5); transition: fill .2s; }
+.bar.over { fill: var(--coral); }
+.bar-l { font: 500 12.5px var(--body); fill: var(--muted); text-anchor: end; }
+.bar-v { font: 500 12px var(--mono); fill: var(--muted); }
+.bar-v.over { fill: var(--coral); font-weight: 700; }
+.vline { stroke: var(--amber); stroke-width: 2; }
+.vlabel { font: 700 12px var(--mono); fill: var(--amber); }
+
+/* ---------- research ---------- */
+.qa { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; border-top: 1px solid var(--rule-2); }
+.qa article { padding: 22px 22px 24px 0; display: flex; flex-direction: column; gap: 10px; border-bottom: 1px solid var(--rule); min-width: 0; }
+.qa article:not(:nth-child(3n+1)) { padding-left: 22px; border-left: 1px solid var(--rule); }
+.qa .q { font: 800 23px/1.05 var(--display); text-transform: uppercase; letter-spacing: .015em; }
+.qa p { margin: 0; color: var(--muted); font-size: 15.5px; }
+.qa .k { font: 500 11px var(--mono); letter-spacing: .12em; color: var(--amber); text-transform: uppercase; }
+
+/* ---------- results ---------- */
+.res { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(20px, 3vw, 40px); align-items: start; }
+.res > * { min-width: 0; }
+.headline { display: flex; flex-direction: column; gap: 6px; }
+.headline .big { font: 900 clamp(76px, 9vw, 140px)/.85 var(--display); font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.headline .big .from { color: var(--ucs); } .headline .big .to { color: var(--astar); } .headline .big .arr { color: var(--faint); font-weight: 600; font-size: .5em; }
+.headline .delta { font: 700 14px var(--mono); color: var(--astar); }
+.mtx { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.mtx th, .mtx td { padding: 10px 12px 10px 0; text-align: right; border-top: 1px solid var(--rule); font: 500 14px var(--mono); }
+.mtx th { color: var(--faint); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 500; }
+.mtx td:first-child, .mtx th:first-child { text-align: left; color: var(--muted); }
+.mtx td.win { color: var(--astar); font-weight: 700; }
+.mtx caption { caption-side: top; text-align: left; padding-bottom: 8px; }
+.dumb { padding: 16px 18px 10px; }
+.d-line { stroke: var(--rule-2); stroke-width: 3; stroke-linecap: round; }
+.d-u { fill: var(--ucs); stroke: var(--ink-2); stroke-width: 2; }
+.d-s { fill: var(--astar); stroke: var(--ink-2); stroke-width: 2; }
+.d-lab { font: 500 13px var(--body); fill: var(--fg); }
+.d-sub { font: 400 11.5px var(--mono); fill: var(--faint); }
+.d-val { font: 600 12px var(--mono); fill: var(--muted); }
+.d-hit { fill: transparent; }
+.d-row:hover .d-hit { fill: rgba(150, 168, 210, .06); }
+.reading { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 10px; font-size: 15px; color: var(--muted); }
+.reading li { padding-left: 16px; border-left: 2px solid var(--rule-2); }
+.costs { display: flex; gap: 12px; align-items: center; padding: 12px 16px; border-radius: 12px; border: 1px solid rgba(251, 191, 36, .35); background: rgba(251, 191, 36, .05); font-size: 15px; color: var(--muted); }
+.costs b { font: 800 30px/1 var(--display); color: var(--amber); }
+
+/* ---------- evidence ---------- */
+.ac { border-collapse: collapse; width: 100%; }
+.ac th, .ac td { text-align: left; vertical-align: top; padding: 14px 18px 14px 0; border-top: 1px solid var(--rule); font-size: 15px; }
+.ac thead th { font: 500 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); border-top: 0; padding-top: 0; }
+.ac td.id { font: 800 26px/1 var(--display); color: var(--amber); white-space: nowrap; }
+.ac td.name { font-weight: 600; width: 20%; }
+.ac td.how { color: var(--muted); }
+.ac td.test { font: 400 12.5px/1.6 var(--mono); color: var(--faint); width: 30%; }
+.ac .pass { display: inline-flex; align-items: center; gap: 6px; color: var(--astar); font: 700 11px var(--mono); letter-spacing: .1em; }
+
+/* ---------- robustness ---------- */
+.traps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 22px; }
+.traps li { padding: 11px 0; border-top: 1px solid var(--rule); font-size: 15px; color: var(--muted); display: flex; flex-direction: column; gap: 3px; }
+.traps li b { color: var(--fg); font-weight: 600; }
+.traps li span { font: 400 12px var(--mono); color: var(--faint); }
+.term { background: #04060d; border: 1px solid var(--rule-2); border-radius: 14px; overflow: hidden; }
+.term-bar { display: flex; gap: 7px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--rule-2); }
+.term-bar span { margin-left: 8px; font: 500 11.5px var(--mono); color: var(--faint); }
+.term pre { margin: 0; padding: 16px 18px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 400 12.5px/1.65 var(--mono); color: #b7c0d4; }
+.term .p { color: var(--amber); } .term .e { color: var(--coral); } .term .w { color: #f5c46b; } .term .g { color: var(--astar); } .term .d { color: var(--faint); }
+.exit { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.exit div { padding: 12px 14px; border-radius: 10px; border: 1px solid var(--rule); font-size: 14px; color: var(--muted); }
+.exit b { display: block; font: 800 34px/1 var(--display); color: var(--fg); margin-bottom: 4px; }
+
+/* ---------- engineering ---------- */
+.flow { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; align-items: stretch; }
+.flow > div { padding: 16px 16px 16px 0; position: relative; display: flex; flex-direction: column; gap: 6px; border-top: 3px solid var(--rule-2); min-width: 0; }
+.flow > div + div { padding-left: 16px; }
+.flow > div::before { content: ""; position: absolute; top: -9px; left: 0; width: 15px; height: 15px; border-radius: 50%; background: var(--ink); border: 3px solid var(--amber); }
+.flow > div + div::before { left: 16px; }
+.flow b { font: 800 22px/1.05 var(--display); text-transform: uppercase; letter-spacing: .02em; }
+.flow code { align-self: flex-start; }
+.flow p { margin: 0; color: var(--muted); font-size: 14.5px; }
+.tests { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; }
+.tbar { display: grid; grid-template-columns: 150px minmax(0, 1fr) 40px; gap: 12px; align-items: center; font: 500 12.5px var(--mono); color: var(--muted); }
+.tbar .tr { height: 8px; border-radius: 4px; background: rgba(150, 168, 210, .1); overflow: hidden; }
+.tbar .tr i { display: block; height: 100%; background: var(--astar); border-radius: 4px; }
+.tbar b { color: var(--fg); text-align: right; font-weight: 600; }
+.cmd { font: 400 13.5px/1.75 var(--mono); color: #c6cee0; padding: 16px 18px; margin: 0; overflow-x: auto; }
+.cmd .d { color: var(--faint); } .cmd .p { color: var(--amber); }
+.pipe { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font: 500 13px var(--mono); color: var(--muted); }
+.pipe span { padding: 7px 11px; border: 1px solid var(--rule-2); border-radius: 8px; color: var(--fg); }
+.roles { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- limits & demo ---------- */
+.quote { font: 800 clamp(34px, 4.2vw, 62px)/.98 var(--display); text-transform: uppercase; margin: 0; max-width: 20ch; }
+.quote span { color: var(--amber); }
+.lim { margin: 0; padding: 0; list-style: none; counter-reset: lim; display: flex; flex-direction: column; }
+.lim li { padding: 14px 0; border-top: 1px solid var(--rule); color: var(--muted); font-size: 15.5px; display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 16px; }
+.lim li b { color: var(--fg); font-weight: 600; }
+.runbook { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.runbook > div { padding: 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.runbook .time { font: 800 40px/1 var(--display); color: var(--amber); font-variant-numeric: tabular-nums; }
+.runbook p { margin: 0; color: var(--muted); font-size: 15px; }
+.runbook pre { margin: 0; padding: 12px 14px; border-radius: 8px; background: #04060d; border: 1px solid var(--rule); overflow-x: auto; font: 400 12.5px/1.65 var(--mono); color: #c6cee0; }
+.checkpoint { padding: 22px 24px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr); gap: 24px; align-items: center; }
+.checkpoint .q { font: 800 28px/1.05 var(--display); text-transform: uppercase; }
+.checkpoint p { margin: 0; color: var(--muted); }
+.fin { display: flex; justify-content: space-between; align-items: end; gap: 24px; flex-wrap: wrap; }
+.fin h2 { font-size: clamp(64px, 9vw, 150px); }
+.fin h2 span { color: var(--amber); }
+
+/* ---------- tooltip ---------- */
+#tip { position: fixed; z-index: 50; pointer-events: none; padding: 8px 11px; border-radius: 8px; background: #f1f4fa; color: #0b1020; font: 500 12.5px/1.45 var(--mono); max-width: 280px; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .6); opacity: 0; transition: opacity .12s; }
+#tip.on { opacity: 1; }
+#tip b { font-weight: 700; }
+
+/* ---------- responsive ---------- */
+@media (max-width: 1180px) {
+  :root { --rail: 0px; }
+  .rail { display: none; }
+}
+@media (max-width: 980px) {
+  .hero, .grid-2, .algos, .res { grid-template-columns: minmax(0, 1fr); }
+  .arena { grid-template-columns: minmax(0, 1fr); }
+  .qa { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .qa article:not(:nth-child(3n+1)) { padding-left: 0; border-left: 0; }
+  .qa article:nth-child(2n) { padding-left: 22px; border-left: 1px solid var(--rule); }
+  .flow { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 28px; }
+  .flow > div:nth-child(2n+1) { padding-left: 0; } .flow > div:nth-child(2n+1)::before { left: 0; }
+  .runbook { grid-template-columns: minmax(0, 1fr); }
+  .checkpoint { grid-template-columns: minmax(0, 1fr); }
+  .grid-3 { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  body { font-size: 16px; }
+  .scene { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); min-height: auto; padding-block: 56px 72px; }
+  html { scroll-snap-type: none; }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .facts div:nth-child(3) { padding-left: 0; border-left: 0; }
+  .qa { grid-template-columns: minmax(0, 1fr); }
+  .qa article:nth-child(2n) { padding-left: 0; border-left: 0; }
+  .traps { grid-template-columns: minmax(0, 1fr); }
+  .notes { grid-template-columns: minmax(0, 1fr); }
+  .exit { grid-template-columns: minmax(0, 1fr); }
+  .flow { grid-template-columns: minmax(0, 1fr); }
+  .flow > div { padding-left: 0 !important; } .flow > div::before { left: 0 !important; }
+  .lim li { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .ticket { position: static; margin-top: 10px; }
+  .readout { grid-template-columns: minmax(0, 1fr); }
+  .readout div + div { border-left: 0; border-top: 1px solid var(--rule); }
+  .tbar { grid-template-columns: 112px minmax(0, 1fr) 34px; }
+  .dock .count { min-width: 52px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
+}
+</style>
+
+<nav class="rail" aria-label="Presentation stations">
+  <div class="brand">Campus Route Planner<span>FAI · Project 1</span></div>
+  <ol id="stations"><span class="progress" id="railProgress"></span></ol>
+  <div class="hint"><kbd>↓</kbd> <kbd>→</kbd> next · <kbd>↑</kbd> back<br><kbd>F</kbd> fullscreen</div>
+</nav>
+
+<div class="dock" role="toolbar" aria-label="Navigate">
+  <button id="prevBtn" type="button" aria-label="Previous station"><svg viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg></button>
+  <span class="count mono" id="count"><b>01</b> / 14</span>
+  <button id="nextBtn" type="button" aria-label="Next station"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
+  <button id="fsBtn" type="button" aria-label="Fullscreen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+</div>
+
+<main id="deck">
+
+<!-- 01 START -->
+<section class="scene" id="start" data-station="Start">
+  <div class="wrap">
+    <div class="hero">
+      <div>
+        <p class="eyebrow">Fundamentals of AI · Project 1</p>
+        <h1 style="margin-top:20px">Campus<br>Route <span class="amp">&amp;</span><br><span class="thin">Constraint</span><br>Planner</h1>
+        <p class="lede">A campus maintenance team needs the fastest walk between buildings, even when a path is closed and a stop must be made on the way. We wrote it down as a <strong>search problem</strong> and solved it with <strong>Uniform Cost Search</strong> and <strong>A*</strong>, without training a model.</p>
+      </div>
+      <div class="mapcard panel">
+        <svg class="map" id="heroMap" viewBox="-70 -14 1220 664" role="img" aria-label="graph2_campus map with the route Gate to Workshop via Canteen"></svg>
+        <div class="ticket" id="ticket" aria-live="polite"></div>
+      </div>
+    </div>
+    <div class="facts">
+      <div><b>3</b><span>graphs provided by the brief</span></div>
+      <div><b>22</b><span>requests answered, costs verified</span></div>
+      <div><b>159</b><span>automated tests, all passing</span></div>
+      <div><b>0</b><span>runtime dependencies (stdlib only)</span></div>
+    </div>
+    <div class="byline"><span>Applied Artificial Intelligence · Master's Programme</span><span>Faculty of Engineering, Sibiu</span><span>Team of five: PO · Architect · Tester · AI Dev · Reliability</span></div>
+  </div>
+</section>
+
+<!-- 02 PROBLEM -->
+<section class="scene" id="problem" data-station="The problem">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">02</span> Client &amp; problem</p>
+      <h2>A route that obeys the day's constraints</h2>
+    </header>
+    <div class="grid-2">
+      <div style="display:flex;flex-direction:column;gap:24px">
+        <ul class="list">
+          <li><span><strong>A directed campus graph</strong> read from CSV: buildings, one-way connections and travel time in minutes.</span></li>
+          <li><span><strong>Temporary closures.</strong> Some connections are blocked for a single request, e.g. <code>A&gt;G;B&gt;G</code>.</span></li>
+          <li><span><strong>A required visit.</strong> Keys, a tool or a permit must be picked up before reaching the work site.</span></li>
+          <li><span><strong>The answer</strong> is the minimal total travel time and the route, or a clear <code>NO_FEASIBLE_ROUTE</code>.</span></li>
+          <li><span><strong>Bad input is refused</strong>: missing columns, unknown buildings, negative travel times.</span></li>
+        </ul>
+        <div class="boundary"><b>Boundary</b><span>The planner only knows the graph it is given. It cannot check whether a real path on campus is open or safe. No GPS, no live maps.</span></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="label">The briefing example, live · graph1_brief_example</div>
+        <div class="mapcard panel"><svg class="map" id="g1Map" viewBox="-10 0 720 350" role="img" aria-label="graph1 brief example"></svg></div>
+        <div class="tasks" id="g1Tasks" role="group" aria-label="graph1 requests"></div>
+        <div class="result" id="g1Result" aria-live="polite"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 03 FORMULATION -->
+<section class="scene" id="formulation" data-station="Formulation">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">03</span> Problem formulation</p>
+      <h2>Familiar ideas, made precise</h2>
+      <p class="lede">The five concepts from last year's course, each turned into one exact decision in the code.</p>
+    </header>
+    <div class="tablebox">
+      <table class="spec">
+        <tr><th>State</th><td class="q">What describes the current situation?</td><td class="a"><em>(building, visited_required)</em><small>The flag is part of the state (AC-03). Frozen dataclass, hashable.</small></td></tr>
+        <tr><th>Start</th><td class="q">Where does the search begin?</td><td class="a">(start, required is None <em>or</em> start == required)</td></tr>
+        <tr><th>Actions</th><td class="q">What choices are available?</td><td class="a">walk an outgoing edge that is not blocked <em>for this request</em><small>Closures remove actions; the graph itself is never modified.</small></td></tr>
+        <tr><th>Transition</th><td class="q">What does an action change?</td><td class="a">(u, f) → (v, f <em>or</em> v == required)</td></tr>
+        <tr><th>Goal test</th><td class="q">How do we recognise success?</td><td class="a">building == goal <em>and</em> visited_required<small>Checked when the state is removed from the queue, never when it is generated.</small></td></tr>
+        <tr><th>Path cost</th><td class="q">How do we measure a solution?</td><td class="a">Σ edge minutes, every edge ≥ 0<small>A negative time stops loading with <code>INVALID_EDGE_WEIGHT</code>.</small></td></tr>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 04 STATE SPACE -->
+<section class="scene" id="state" data-station="State space">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">04</span> The key decision</p>
+      <h2>One building, two states</h2>
+    </header>
+    <div class="grid-2" style="grid-template-columns:minmax(0,4fr) minmax(0,7fr);align-items:center">
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <p class="lede" style="font-size:18px">Arriving at the Lab <strong>before</strong> the Kitchen pickup is not the same as arriving <strong>after</strong> it: the work left to do is different. So every building lives on two layers of the search.</p>
+        <ul class="list">
+          <li><span>At most <strong>2·|V|</strong> states: 22 on graph2, 24 on graph3. Exact and still cheap.</span></li>
+          <li><span>A route may <strong>revisit a building</strong> when the flag has changed: <code>… Lab → Kitchen → Lounge → Lab</code>, 12 min.</span></li>
+          <li><span>Brief's question: <em>are two routes to the same building equivalent if only one has made the visit?</em> <strong>No.</strong> They are different states.</span></li>
+        </ul>
+        <div class="wrong"><b>With state = building only:</b> Lab is closed at g = 9, before the pickup. The return to Lab after the Kitchen is pruned, and the planner wrongly answers <b>NO_FEASIBLE_ROUTE</b>.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <div class="stage panel" id="stage" aria-label="Two-layer state space of graph3_traps. Drag to rotate.">
+          <span class="stagehint">drag to orbit</span>
+          <svg id="stage3d" viewBox="-560 -330 1120 640" role="img" aria-label="Route Entrance to Lab via Kitchen across the two state layers"></svg>
+        </div>
+        <div class="readout" aria-live="polite">
+          <div><span class="label">State</span><b id="r3state">(Entrance, False)</b></div>
+          <div><span class="label">g (minutes)</span><b id="r3g">0</b></div>
+          <div><span class="label">Request</span><b style="font-size:14px">Entrance → Lab via Kitchen</b></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 05 ALGORITHMS -->
+<section class="scene" id="algorithms" data-station="Algorithms">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">05</span> The two methods</p>
+      <h2>One engine, two strategies</h2>
+      <p class="lede">UCS and A* share a single best-first search. It always expands the state with the lowest <strong>f = g + h</strong>. Only the heuristic <strong>h</strong> differs.</p>
+    </header>
+    <div class="algos">
+      <div>
+        <div class="alg ucs panel">
+          <span class="label">Uniform Cost Search · the exact baseline</span>
+          <div class="f">f = g</div>
+          <dl>
+            <dt>Expands</dt><dd>the state with the lowest path cost so far</dd>
+            <dt>Optimal if</dt><dd>every edge cost is ≥ 0</dd>
+            <dt>Knows</dt><dd>edges only</dd>
+          </dl>
+        </div>
+        <div class="alg as panel">
+          <span class="label">A* · informed search</span>
+          <div class="f">f = g + h</div>
+          <dl>
+            <dt>Expands</dt><dd>lowest cost so far plus an estimate of the cost left</dd>
+            <dt>Optimal if</dt><dd>h is consistent (graph search with a closed set, like ours)</dd>
+            <dt>Knows</dt><dd>edges + building coordinates</dd>
+          </dl>
+        </div>
+        <div class="eq">With <b>h = 0</b>, f = g: the same queue order, the same expanded states, the same route. <b>A* with h = 0 is UCS</b>, and the tests check it on every request.</div>
+      </div>
+      <div class="panel" style="overflow:hidden">
+        <div class="codehead"><span>src/search/best_first.py · condensed</span><span>UCS: h = 0 · A*: h = distance / v<sub>max</sub></span></div>
+<pre class="code" aria-label="Condensed best-first search source"><span class="ln"><span class="k">def</span> <span class="fn">best_first_search</span>(graph, start, goal, h, required=<span class="k">None</span>, blocked=()):</span><span class="ln">    start_state = State(start, required <span class="k">is None or</span> start == required)</span><span class="ln hl">    frontier = [(h(start), <span class="n">0.0</span>, <span class="n">0</span>, start_state)]    <span class="c"># (f, g, tie-break, state)</span><span class="badge">1</span></span><span class="ln">    best_g, parent, closed = {start_state: <span class="n">0.0</span>}, {start_state: <span class="k">None</span>}, set()</span><span class="ln">    <span class="k">while</span> frontier:</span><span class="ln">        f, g, _, state = heapq.heappop(frontier)</span><span class="ln hl">        <span class="k">if</span> state <span class="k">in</span> closed: <span class="k">continue</span>          <span class="c"># stale entry, not counted</span><span class="badge">2</span></span><span class="ln">        closed.add(state); expanded += <span class="n">1</span></span><span class="ln hl">        <span class="k">if</span> state.node == goal <span class="k">and</span> state.visited:  <span class="c"># goal test on removal</span><span class="badge">3</span></span><span class="ln">            <span class="k">return</span> rebuild(parent, state), g, expanded</span><span class="ln">        <span class="k">for</span> edge <span class="k">in</span> graph.get_neighbors(state.node, blocked):</span><span class="ln hl">            child = State(edge.to, state.visited <span class="k">or</span> edge.to == required)<span class="badge">4</span></span><span class="ln">            new_g = g + edge.minutes</span><span class="ln">            <span class="k">if</span> child <span class="k">in</span> closed <span class="k">or</span> new_g &gt;= best_g.get(child, inf): <span class="k">continue</span></span><span class="ln">            best_g[child], parent[child] = new_g, state</span><span class="ln">            counter += <span class="n">1</span></span><span class="ln">            heapq.heappush(frontier, (new_g + h(edge.to), new_g, counter, child))</span><span class="ln">    <span class="k">return</span> <span class="s">NO_FEASIBLE_ROUTE</span></span></pre>
+        <ul class="notes">
+          <li><i>1</i><span><strong>Deterministic ties</strong> on (f, g, insertion order): the same input expands the same states on every machine (ADR-02, ADR-07).</span></li>
+          <li><i>2</i><span><strong>Expanded states</strong> = states removed and expanded. Outdated duplicates are skipped and not counted (ADR-05).</span></li>
+          <li><i>3</i><span><strong>Goal test on removal</strong>, so no cheaper route is still waiting in the queue. Matters for zero-cost edges (ADR-04).</span></li>
+          <li><i>4</i><span><strong>The flag flips</strong> when the walk enters the required stop, and stays set (AC-01, AC-03).</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 06 RACE -->
+<section class="scene" id="race" data-station="Live race">
+  <div class="wrap" style="gap:20px">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">06</span> Live · graph2_campus</p>
+      <h2>UCS vs A*, state by state</h2>
+      <p class="lede">The same search as the Python code, running in this page. Pick a request or click a corridor to close it, then watch which states each method takes out of the queue.</p>
+    </header>
+    <div class="controls panel">
+      <div class="field"><label for="rTask">Request</label><select id="rTask"></select></div>
+      <div class="field"><label for="rStart">Start</label><select id="rStart"></select></div>
+      <div class="field"><label for="rGoal">Goal</label><select id="rGoal"></select></div>
+      <div class="field"><label for="rReq">Required stop</label><select id="rReq"></select></div>
+      <div class="field" style="min-width:160px"><label>Closed (click a corridor)</label><div class="blockedlist" id="rBlocked"></div></div>
+      <span class="ctl-sep"></span>
+      <button class="btn" id="rStep" type="button">Step</button>
+      <button class="btn primary" id="rPlay" type="button"><svg viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></svg><span>Replay</span></button>
+    </div>
+    <div class="arena">
+      <div class="lane panel">
+        <div class="lane-head"><h3><span class="sw u" style="background:var(--ucs)"></span>UCS <span class="chip">h = 0</span></h3><div class="counter" id="uCount">0<small>expanded</small></div></div>
+        <svg class="map" id="uMap" viewBox="-70 -14 1220 664" role="img" aria-label="UCS search on the campus map"></svg>
+        <div class="lane-foot" id="uFoot"></div>
+      </div>
+      <div class="lane panel">
+        <div class="lane-head"><h3><span class="sw s" style="background:var(--astar)"></span>A* <span class="chip" id="aChip">h = dist / 80</span></h3><div class="counter" id="aCount">0<small>expanded</small></div></div>
+        <svg class="map" id="aMap" viewBox="-70 -14 1220 664" role="img" aria-label="A* search on the campus map"></svg>
+        <div class="lane-foot" id="aFoot"></div>
+      </div>
+    </div>
+    <div class="legend">
+      <span class="chip"><span class="sw v"></span>expanded with stop pending (flag False)</span>
+      <span class="chip"><span class="sw c"></span>expanded with stop done (flag True)</span>
+      <span class="chip"><span class="sw a"></span>route returned</span>
+      <span class="chip"><span class="sw r"></span>closed corridor</span>
+    </div>
+  </div>
+</section>
+
+<!-- 07 HEURISTIC -->
+<section class="scene" id="heuristic" data-station="Heuristic">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">07</span> The heuristic</p>
+      <h2>Checked against the data, not assumed</h2>
+    </header>
+    <div class="grid-2" style="grid-template-columns:minmax(0,5fr) minmax(0,7fr)">
+      <div class="proof panel">
+        <div class="formula">h(n) = <em>straight_line(n, goal)</em> / v<sub>max</sub></div>
+        <p>Client note: nobody walks faster than <strong>80 m/min</strong> in a straight line. Coordinates in <code>nodes.csv</code> are in metres.</p>
+        <div class="step">admissible: walk ≥ straight line, speed ≤ v<sub>max</sub><br>⇒ h(n) ≤ h*(n)</div>
+        <div class="step">consistent, for every edge n → m with time c:<br>h(n) ≤ d(n,m)/v<sub>max</sub> + h(m) ≤ c + h(m)</div>
+        <p>The second inequality holds only if <strong>no edge is faster than v<sub>max</sub></strong>. That is a property of the data, so <code>check_consistency</code> tests all 34 edges before A* uses h. One failure means A* falls back to h = 0 and says why.</p>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="slider panel">
+          <div class="slider-top">
+            <div><span class="label">v<sub>max</sub> · try moving below 79.4</span><div class="vmax-val" id="vmaxVal">80<small>m/min</small></div></div>
+            <span class="chip ok" id="hStatus">✓ all 34 edges respect v_max · Euclidean h in use</span>
+          </div>
+          <input type="range" id="vmax" min="40" max="160" step="1" value="80" aria-label="v max in metres per minute">
+          <div class="hstats">
+            <div class="u"><span class="label">UCS · expanded on 6 requests</span><b id="hU">77</b></div>
+            <div class="s"><span class="label">A* · expanded on 6 requests</span><b id="hA">59</b></div>
+          </div>
+        </div>
+        <div class="panel" style="padding:16px 18px 8px">
+          <div class="label" style="margin-bottom:8px">Implied walking speed of each corridor (distance ÷ minutes, m/min)</div>
+          <div class="chartbox"><svg id="speedChart" role="img" aria-label="Speed of each corridor compared with v max"></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 08 RESEARCH -->
+<section class="scene" id="research" data-station="Research">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">08</span> Research task</p>
+      <h2>The six questions, answered</h2>
+    </header>
+    <div class="qa">
+      <article><span class="k">Choosing what to explore</span><div class="q">How does each method pick the next state?</div><p>UCS takes the lowest <strong>g</strong>. A* takes the lowest <strong>g + h</strong>. Ties go by (f, g, insertion order), so runs are reproducible.</p></article>
+      <article><span class="k">Optimality</span><div class="q">When is the answer optimal?</div><p>UCS: all costs ≥ 0. A*: h admissible for tree search, <strong>consistent</strong> for graph search with a closed set. In both cases the goal test runs when the state leaves the queue.</p></article>
+      <article><span class="k">Zero heuristic</span><div class="q">What does A* do with h = 0?</div><p>It becomes UCS exactly: the same path, cost and number of expanded states. Verified on all 22 requests.</p></article>
+      <article><span class="k">Available information</span><div class="q">Is a non-zero heuristic useful here?</div><p>Only graph2 has coordinates. There it cuts expansions from <strong>77 to 59</strong>. graph1, graph3 and probably the hidden graph have none, so A* runs with h = 0.</p></article>
+      <article><span class="k">Constraints</span><div class="q">How do the constraints change the search?</div><p>Closures remove actions for one request. The required stop <strong>doubles the state space</strong> and moves the goal to (goal, True).</p></article>
+      <article><span class="k">Fair comparison</span><div class="q">How do we compare the methods fairly?</div><p>Same code path, only h changes. Cost, expanded states and runtime reported separately. Runtime = search only, median of 50 runs. The benchmark fails if costs ever differ.</p></article>
+    </div>
+  </div>
+</section>
+
+<!-- 09 RESULTS -->
+<section class="scene" id="results" data-station="Results">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">09</span> Experiments</p>
+      <h2>Same answers, less work</h2>
+    </header>
+    <div class="res">
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <div class="headline">
+          <span class="label">graph2_campus · total expanded states, 6 requests</span>
+          <div class="big"><span class="from">77</span><span class="arr">→</span><span class="to">59</span></div>
+          <span class="delta">−23 % with the Euclidean heuristic · UCS → A*</span>
+        </div>
+        <div class="costs"><b>22/22</b><span>requests return the <strong>same minimal cost</strong> with UCS, A* (h = 0) and A* (Euclidean).</span></div>
+        <table class="mtx">
+          <caption class="label">Total expanded states per graph</caption>
+          <thead><tr><th>Graph</th><th>UCS</th><th>A* h=0</th><th>A* Eucl.</th></tr></thead>
+          <tbody>
+            <tr><td>graph1_brief_example</td><td>29</td><td>29</td><td>29</td></tr>
+            <tr><td>graph2_campus</td><td>77</td><td>77</td><td class="win">59</td></tr>
+            <tr><td>graph3_traps</td><td>61</td><td>61</td><td>61</td></tr>
+          </tbody>
+        </table>
+        <table class="mtx">
+          <caption class="label">Runtime, reported separately · median of 50 runs, ms</caption>
+          <thead><tr><th>Graph</th><th>UCS</th><th>A* h=0</th><th>A* Eucl.</th></tr></thead>
+          <tbody>
+            <tr><td>graph1_brief_example</td><td>0.0384</td><td>0.0384</td><td>0.0388</td></tr>
+            <tr><td>graph2_campus</td><td>0.1525</td><td>0.1518</td><td class="win">0.1323</td></tr>
+            <tr><td>graph3_traps</td><td>0.0755</td><td>0.0750</td><td>0.0767</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="panel dumb">
+          <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:6px">
+            <span class="label">Expanded states per request · graph2_campus</span>
+            <span class="legend"><span class="chip"><span class="sw u"></span>UCS</span><span class="chip"><span class="sw s"></span>A* Euclidean</span></span>
+          </div>
+          <div class="chartbox"><svg id="dumbChart" role="img" aria-label="Expanded states per request, UCS versus A*"></svg></div>
+        </div>
+        <ul class="reading">
+          <li><strong>Largest gain</strong> when the goal is far and the straight line points the right way: Workshop → SportsHall, 9 → 5.</li>
+          <li><strong>No gain</strong> when a closure forces a detour: with PrintShop&gt;Workshop closed, 11 → 11. The heuristic does not know about closures.</li>
+          <li><strong>Required stops still gain</strong> (18 → 14, 19 → 13), but less, because h aims only at the final goal.</li>
+          <li><strong>Runtime</strong> differs by microseconds on graphs this small. Expanded states are the more reliable measure of effort.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 10 EVIDENCE -->
+<section class="scene" id="evidence" data-station="Evidence">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">10</span> Acceptance criteria</p>
+      <h2>Every criterion has a test behind it</h2>
+    </header>
+    <div class="tablebox">
+      <table class="ac">
+        <thead><tr><th>AC</th><th>Requirement</th><th>How we meet it</th><th>Checked by</th></tr></thead>
+        <tbody>
+          <tr><td class="id">01</td><td class="name">Required stop is visited</td><td class="how">The goal is (goal, True): reaching the goal with the flag False is not a solution.</td><td class="test">assert_valid_route · test_round_trip_to_dead_end_stop · test_required_visit_on_start_is_already_done</td></tr>
+          <tr><td class="id">02</td><td class="name">Closed edges are never used</td><td class="how"><code>get_neighbors</code> filters the blocked edges of this request only. Blocking a missing edge only warns.</td><td class="test">test_blocked_edge_changes_route · test_parse_blocked_edges · test_blocking_a_missing_edge_only_warns</td></tr>
+          <tr><td class="id">03</td><td class="name">Composite state</td><td class="how">Frozen <code>State(current_node, has_visited_required)</code>; a building may appear twice in a route.</td><td class="test">test_route_can_revisit_a_building · test_required_stop_inside_zero_cost_cycle</td></tr>
+          <tr><td class="id">04</td><td class="name">UCS + A*, optimal costs</td><td class="how">22 reference costs from an independent script; A* (h=0) ≡ UCS; h ≤ true cost on all 121 pairs.</td><td class="test">test_optimal_cost_on_provided_graphs · test_astar_with_zero_heuristic_is_ucs · test_euclidean_heuristic_is_admissible_on_campus</td></tr>
+          <tr><td class="id">05</td><td class="name">Telemetry</td><td class="how">solution_cost, path_sequence, expanded_states, runtime_ms in the CLI, the CSV export and the GUI.</td><td class="test">test_telemetry_is_filled · test_expanded_states_match_reference_table</td></tr>
+          <tr><td class="id">06</td><td class="name">Robust to bad input</td><td class="how"><code>NO_FEASIBLE_ROUTE</code> is a normal answer; coded errors name the file and line; 8 invalid sample files.</td><td class="test">test_invalid_edges_files_are_rejected · test_unknown_building_is_rejected · test_custom_maps</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- 11 ROBUSTNESS -->
+<section class="scene" id="robustness" data-station="Robustness">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">11</span> Traps &amp; failure modes</p>
+      <h2>Honest answers when things go wrong</h2>
+    </header>
+    <div class="grid-2" style="grid-template-columns:minmax(0,6fr) minmax(0,6fr)">
+      <div style="display:flex;flex-direction:column;gap:18px">
+        <div class="label">Traps handled · graph3_traps and our maps in data/custom/</div>
+        <ul class="traps">
+          <li><b>Zero-cost edge</b><span>HallA → HallB, 0 min</span></li>
+          <li><b>Three equally cheap routes</b><span>Entrance → Lab, 9 min each</span></li>
+          <li><b>Disconnected building</b><span>Observatory ⇄ Greenhouse</span></li>
+          <li><b>One-way edges</b><span>Office → Entrance has no route</span></li>
+          <li><b>Dead-end required stop</b><span>via Archive → NO_FEASIBLE_ROUTE</span></li>
+          <li><b>Route must revisit a building</b><span>Lab → Kitchen → Lounge → Lab</span></li>
+          <li><b>Start = goal</b><span>cost 0, one-building route</span></li>
+          <li><b>Required stop = start</b><span>already visited</span></li>
+          <li><b>Parallel edges</b><span>the cheaper A&gt;B is used</span></li>
+          <li><b>Zero-cost cycle</b><span>terminates, ≤ 2·|V| expansions</span></li>
+        </ul>
+        <div class="exit">
+          <div><b>0</b>every request answered, a route or NO_FEASIBLE_ROUTE</div>
+          <div><b>1</b>a request is invalid; the others still run</div>
+          <div><b>2</b>input files rejected, file and line named</div>
+        </div>
+      </div>
+      <div class="term">
+        <div class="term-bar"><i></i><i></i><i></i><span>real output · python -m src.cli</span></div>
+<pre><span class="p">$</span> python -m src.cli data/graph1_brief_example --start S --goal G --blocked "A&gt;G;B&gt;G;C&gt;G"
+<span class="w">warning: not every building has coordinates, A* uses h = 0 (same as UCS)</span>
+Query  S -&gt; G   blocked: A&gt;G;B&gt;G;C&gt;G   required: -
+  UCS  <span class="e">NO_FEASIBLE_ROUTE</span>  expanded_states=4
+  A*   <span class="e">NO_FEASIBLE_ROUTE</span>  expanded_states=4
+<span class="d">exit 0</span>
+
+<span class="p">$</span> python -m src.cli tests/fixtures/negative_weight.csv
+<span class="e">error: INVALID_EDGE_WEIGHT: edge A-&gt;G has negative travel time -3.0
+       (tests\fixtures\negative_weight.csv, line 3)</span>
+<span class="d">exit 2</span>
+
+<span class="p">$</span> python -m src.cli data/graph1_brief_example --start S --goal Z
+  UCS  <span class="e">INVALID_REQUEST</span>  UNKNOWN_BUILDING: goal 'Z' is not in the graph
+<span class="d">exit 1</span>
+
+<span class="p">$</span> python -m src.cli data/graph2_campus --vmax 70 --start Gate --goal Workshop
+<span class="w">warning: 10 edge(s) faster than 70 m/min (Gate&gt;DormA, …),
+the Euclidean heuristic could overestimate, A* uses h = 0</span>
+  A*   <span class="g">SUCCESS</span>  solution_cost=17  expanded_states=11</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 12 ENGINEERING -->
+<section class="scene" id="engineering" data-station="Engineering">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">12</span> Software &amp; reproducibility</p>
+      <h2>Built to be cloned, run and checked</h2>
+    </header>
+    <div class="flow">
+      <div><b>Entry</b><code>src/cli.py · src/gui/</code><p>CLI and a local web GUI with live replay. Both call the same code.</p></div>
+      <div><b>Loader</b><code>src/io/loader.py</code><p>Parses and validates CSV, with coded errors.</p></div>
+      <div><b>Models</b><code>src/models/</code><p>Graph, Edge, Task and the frozen State.</p></div>
+      <div><b>Search</b><code>src/search/</code><p>Best-first core, UCS, A*, heuristic and its safety check.</p></div>
+      <div><b>Evidence</b><code>experiments/ · results/</code><p>Benchmark: 3 variants, median of 50 runs.</p></div>
+    </div>
+    <div class="grid-2">
+      <div class="panel tests">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:6px"><span class="label">159 tests · python -m pytest · 1.4 s</span><span class="chip ok">✓ 159 passed</span></div>
+        <div id="testBars" style="display:flex;flex-direction:column;gap:8px"></div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div class="term">
+          <div class="term-bar"><i></i><i></i><i></i><span>from clone to answer on an unseen graph</span></div>
+<pre class="cmd"><span class="d"># Python 3.10+, standard library only</span>
+<span class="p">$</span> python -m venv .venv &amp;&amp; .venv\Scripts\activate
+<span class="p">$</span> pip install -r requirements.txt   <span class="d"># pytest</span>
+<span class="p">$</span> python -m pytest
+<span class="p">$</span> python -m src.cli path/to/unseen_graph
+<span class="p">$</span> python -m src.gui path/to/unseen_graph</pre>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <span class="label">How work entered the repository</span>
+          <div class="pipe"><span>Issue + owner</span>→<span>Branch</span>→<span>Pull request</span>→<span>Review by a colleague</span>→<span>Merge</span></div>
+        </div>
+        <p style="margin:0;color:var(--muted);font-size:15px"><strong style="color:var(--fg)">AI tools, recorded in docs/ai_usage.md.</strong> Claude Code helped draft code and docs. Its output was checked with reference costs from an independent script, a route checker that does not trust the algorithm, and team review of every pull request.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- 13 LIMITS -->
+<section class="scene" id="limits" data-station="Limits">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">13</span> Limitations &amp; lessons</p>
+    </header>
+    <div class="grid-2" style="grid-template-columns:minmax(0,5fr) minmax(0,7fr);align-items:center">
+      <div style="display:flex;flex-direction:column;gap:22px">
+        <p class="quote">A more complex method <span>does not automatically</span> produce a better result.</p>
+        <p class="lede" style="font-size:17px">On graph1 and graph3 A* <strong>is</strong> UCS: without coordinates there is nothing to build a heuristic from. Where the data supports it (graph2), A* saves 23 % of the work and never changes an answer.</p>
+      </div>
+      <ul class="lim">
+        <li><b>Supplied graph only</b><span>We cannot tell whether a corridor is really open or safe.</span></li>
+        <li><b>One required stop</b><span>Several stops would need a set of visited stops in the state, up to 2<sup>k</sup> flags, or a fixed order.</span></li>
+        <li><b>One of several best routes</b><span>Equal-cost routes exist (three of 9 min in graph3). We return one, deterministically.</span></li>
+        <li><b>Heuristic quality</b><span>It ignores closures and the pending stop. A stronger admissible option: (d(n, stop) + d(stop, goal)) / v<sub>max</sub> while the stop is pending.</span></li>
+        <li><b>Data-dependent h</b><span>Wrong coordinates or v<sub>max</sub> trigger the fallback to h = 0: always correct, only slower.</span></li>
+        <li><b>Runtimes</b><span>Measured on one machine; comparable only within the same run.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 14 DEMO -->
+<section class="scene" id="demo" data-station="Demo">
+  <div class="wrap">
+    <header class="sh">
+      <p class="eyebrow"><span class="no">14</span> Four-minute demonstration</p>
+      <h2>Ordinary run, then a failure that is handled</h2>
+    </header>
+    <div class="runbook">
+      <div class="panel">
+        <span class="time">0:00 – 2:00</span>
+        <h3>Standard request</h3>
+        <p>Gate → Workshop via Canteen. Route of 19 min, the pickup made, then cost, expanded states and runtime for both methods.</p>
+<pre>python -m src.cli data/graph2_campus
+python -m src.gui</pre>
+      </div>
+      <div class="panel">
+        <span class="time">2:00 – 4:00</span>
+        <h3>Closures &amp; failure</h3>
+        <p>Close PrintShop&gt;Workshop: the route is recomputed (18 min). Then close every way into G: a clean NO_FEASIBLE_ROUTE, no crash.</p>
+<pre>--blocked "PrintShop&gt;Workshop"
+--start S --goal G --blocked "A&gt;G;B&gt;G;C&gt;G"</pre>
+      </div>
+      <div class="panel">
+        <span class="time">&lt; 0:30</span>
+        <h3>Unseen graph</h3>
+        <p>Clone, install, run. Without coordinates A* says it uses h = 0, and every request still gets an answer.</p>
+<pre>python -m src.cli path/to/hidden_graph
+python -m experiments.run_benchmarks \
+  --graphs path/to/hidden_graph</pre>
+      </div>
+    </div>
+    <div class="checkpoint panel">
+      <div class="q">What does the system need to know to tell a valid solution from an invalid one?</div>
+      <p>Four things: every step is a real edge that is <strong style="color:var(--fg)">not closed</strong> for this request; the <strong style="color:var(--fg)">required stop</strong> appears before the route ends; it ends at the <strong style="color:var(--fg)">goal</strong>; and the reported cost <strong style="color:var(--fg)">equals the sum</strong> of the edge times. That is the flag in the state, and exactly what our independent route checker tests.</p>
+    </div>
+    <div class="fin">
+      <h2>Questions<span>?</span></h2>
+      <div class="byline" style="flex-direction:column;gap:6px;text-align:right"><span>Campus Route &amp; Constraint Planner</span><span>Fundamentals of AI · Project 1 · Sibiu</span></div>
+    </div>
+  </div>
+</section>
+
+</main>
+<div id="tip" role="tooltip"></div>
+
+<script>
+/*ENGINE*/
+const DATA = {
+  g1: {
+    coords: null,
+    layout: { S: [40, 175], A: [250, 60], C: [470, 60], B: [250, 290], G: [660, 175] },
+    edges: "S,A,2;S,B,5;A,C,2;A,G,9;B,G,2;C,G,3",
+    tasks: [["S","G","",""],["S","G","C>G",""],["S","G","","C"],["S","G","","B"],["S","G","A>G;B>G;C>G",""],["G","S","",""],["S","C","",""]]
+  },
+  g2: {
+    coords: { Gate:[0,300], SportsHall:[80,40], DormA:[60,580], Library:[260,140], Rectorate:[280,450], Aula:[480,300], Canteen:[520,560], AILab:[700,120], Parking:[760,480], PrintShop:[900,300], Workshop:[1080,250] },
+    edges: "Gate,SportsHall,4;SportsHall,Gate,4;Gate,DormA,4;DormA,Gate,4;Gate,Library,4;Library,Gate,4;Gate,Rectorate,4;Rectorate,Gate,4;SportsHall,Library,3;Library,SportsHall,3;DormA,Rectorate,4;Rectorate,DormA,4;Library,Aula,4;Aula,Library,4;Rectorate,Aula,4;Aula,Rectorate,4;Rectorate,Canteen,4;Canteen,Rectorate,4;Library,AILab,6;AILab,Library,6;Aula,AILab,7;AILab,Aula,7;Aula,Parking,5;Parking,Aula,5;Canteen,Parking,5;Parking,Canteen,5;AILab,PrintShop,4;PrintShop,AILab,4;Parking,PrintShop,3;PrintShop,Parking,3;PrintShop,Workshop,3;Workshop,PrintShop,3;AILab,Workshop,8;Workshop,AILab,8",
+    tasks: [["Gate","Workshop","",""],["Gate","Workshop","PrintShop>Workshop",""],["Gate","Workshop","","Canteen"],["DormA","AILab","",""],["Workshop","SportsHall","",""],["Gate","Workshop","Library>AILab;Aula>AILab","Rectorate"]]
+  },
+  g3: {
+    coords: null,
+    layout: { Entrance:[40,220], Archive:[190,30], HallA:[190,130], HallB:[320,250], Stairs:[450,340], Office:[470,140], Roof:[620,40], Lab:[630,250], Kitchen:[780,160], Lounge:[790,340], Observatory:[930,40], Greenhouse:[940,180] },
+    edges: "Entrance,HallA,3;Entrance,Office,10;HallA,HallB,0;HallB,Stairs,2;Stairs,Office,2;HallA,Archive,4;Office,Lab,2;Stairs,Lab,4;HallB,Lab,6;Office,Roof,3;Lab,Kitchen,1;Kitchen,Lounge,1;Lounge,Lab,1;Observatory,Greenhouse,2;Greenhouse,Observatory,2"
+  }
+};
+
+function makeGraph(d) {
+  const edges = d.edges.split(";").map(r => { const [a, b, w] = r.split(","); return [a, b, +w]; });
+  const adj = new Map();
+  const add = n => { if (!adj.has(n)) adj.set(n, []); };
+  if (d.coords) Object.keys(d.coords).forEach(add);
+  for (const [a, b, w] of edges) { add(a); add(b); adj.get(a).push([a, b, w]); }
+  return { coords: d.coords, pos: d.coords || d.layout, edges, adj, ids: [...adj.keys()], tasks: d.tasks || [] };
+}
+
+class Heap {
+  constructor() { this.a = []; }
+  get size() { return this.a.length; }
+  less(x, y) { return x[0] < y[0] || (x[0] === y[0] && (x[1] < y[1] || (x[1] === y[1] && x[2] < y[2]))); }
+  push(v) {
+    const a = this.a; a.push(v); let i = a.length - 1;
+    while (i > 0) { const p = (i - 1) >> 1; if (this.less(a[i], a[p])) { [a[i], a[p]] = [a[p], a[i]]; i = p; } else break; }
+  }
+  pop() {
+    const a = this.a, top = a[0], last = a.pop();
+    if (a.length) {
+      a[0] = last; let i = 0;
+      for (;;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < a.length && this.less(a[l], a[m])) m = l;
+        if (r < a.length && this.less(a[r], a[m])) m = r;
+        if (m === i) break;
+        [a[i], a[m]] = [a[m], a[i]]; i = m;
+      }
+    }
+    return top;
+  }
+}
+
+// Mirrors src/search/best_first.py: same tie-breaking, same closed-set and stale-entry rules.
+function search(G, start, goal, h, req, blocked) {
+  blocked = blocked || new Set();
+  req = req || null;
+  const key = (n, f) => n + "|" + (f ? 1 : 0);
+  const f0 = req === null || start === req;
+  const k0 = key(start, f0);
+  let counter = 0, expanded = 0;
+  const H = new Heap();
+  H.push([h(start), 0, 0, start, f0]);
+  const best = new Map([[k0, 0]]), parent = new Map([[k0, null]]), closed = new Set(), trace = [];
+  while (H.size) {
+    const [f, g, , n, fl] = H.pop();
+    const k = key(n, fl);
+    if (closed.has(k)) continue;
+    closed.add(k); expanded++;
+    trace.push({ n, fl, g, f });
+    if (n === goal && fl) {
+      const path = [];
+      for (let c = k; c; c = parent.get(c)) { const [cn, cf] = c.split("|"); path.push({ n: cn, fl: cf === "1" }); }
+      path.reverse();
+      return { ok: true, cost: g, expanded, trace, path };
+    }
+    for (const [a, b, w] of G.adj.get(n) || []) {
+      if (blocked.has(a + ">" + b)) continue;
+      const v = fl || b === req;
+      const ck = key(b, v), ng = g + w;
+      if (closed.has(ck) || ng >= (best.has(ck) ? best.get(ck) : Infinity)) continue;
+      best.set(ck, ng); parent.set(ck, k); counter++;
+      H.push([ng + h(b), ng, counter, b, v]);
+    }
+  }
+  return { ok: false, cost: Infinity, expanded, trace, path: [] };
+}
+
+function dist(G, a, b) { const p = G.coords[a], q = G.coords[b]; const dx = p[0] - q[0], dy = p[1] - q[1]; return Math.sqrt(dx * dx + dy * dy); }
+function chooseH(G, goal, vmax) {
+  if (!G.coords) return { h: () => 0, mode: "none", fast: [] };
+  const fast = G.edges.filter(([a, b, w]) => dist(G, a, b) / vmax > w + 1e-9);
+  if (fast.length) return { h: () => 0, mode: "fallback", fast };
+  return { h: n => dist(G, n, goal) / vmax, mode: "euclid", fast: [] };
+}
+const zeroH = () => 0;
+const parseBlocked = s => new Set(s ? s.split(";") : []);
+/*END ENGINE*/
+
+const G1 = makeGraph(DATA.g1), G2 = makeGraph(DATA.g2), G3 = makeGraph(DATA.g3);
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const NS = "http://www.w3.org/2000/svg";
+function E(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs || {}) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const $ = id => document.getElementById(id);
+const fmtPath = p => p.map(s => s.n).join(" → ");
+let uid = 0;
+
+/* ---------- map renderer ---------- */
+function drawMap(svg, G, o = {}) {
+  const R = o.r || 15;
+  svg.innerHTML = "";
+  const aid = "arr" + (++uid), aidB = "arrb" + uid;
+  const defs = E("defs", {}, svg);
+  for (const [id, cls] of [[aid, "arrowhead"], [aidB, "arrowhead blocked"]]) {
+    const m = E("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+    E("path", { d: "M0,0 L10,5 L0,10 z", class: cls }, m);
+  }
+  const gE = E("g", {}, svg), gR = E("g", {}, svg), gN = E("g", {}, svg), gT = E("g", {}, svg);
+  const L = { svg, G, R, edges: new Map(), nodes: new Map(), gR, gT, aid, aidB };
+  const pairs = new Map();
+  for (const [a, b, w] of G.edges) {
+    const k = a < b ? a + "~" + b : b + "~" + a;
+    if (!pairs.has(k)) pairs.set(k, { a, b, dirs: new Set(), w });
+    pairs.get(k).dirs.add(a + ">" + b);
+  }
+  for (const [k, p] of pairs) {
+    const [x1, y1] = G.pos[p.a], [x2, y2] = G.pos[p.b];
+    const both = p.dirs.size > 1;
+    const dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy), ux = dx / len, uy = dy / len;
+    const end = both ? R : R + 3;
+    let hit = null;
+    if (o.onEdge) {
+      hit = E("line", { x1, y1, x2, y2, class: "m-hit" }, gE);
+      hit.addEventListener("click", () => o.onEdge(p));
+    }
+    const line = E("line", { x1: x1 + ux * R, y1: y1 + uy * R, x2: x2 - ux * end, y2: y2 - uy * end, class: "m-edge" }, gE);
+    if (!both) line.setAttribute("marker-end", `url(#${aid})`);
+    let lbl = null;
+    if (o.labels !== false) {
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+      lbl = E("text", { x: mx, y: my, class: "m-elabel" }, gE);
+      lbl.textContent = p.w;
+    }
+    L.edges.set(k, { line, lbl, p, both });
+  }
+  for (const id of G.ids) {
+    const [x, y] = G.pos[id];
+    const g = E("g", { class: "m-node", transform: `translate(${x},${y})` }, gN);
+    const ringF = E("circle", { r: R + 6, class: "m-ring f" }, g);
+    const ringT = E("circle", { r: R + 12, class: "m-ring t" }, g);
+    E("circle", { r: R, class: "m-core" }, g);
+    const t = E("text", { y: R + 25, class: "m-name" }, g);
+    t.textContent = id;
+    L.nodes.set(id, { g, ringF, ringT });
+  }
+  return L;
+}
+function setBlocked(L, blocked) {
+  for (const [, e] of L.edges) {
+    const { a, b } = e.p;
+    const on = blocked.has(a + ">" + b) || blocked.has(b + ">" + a);
+    e.line.classList.toggle("blocked", on);
+    if (e.lbl) e.lbl.classList.toggle("blocked", on);
+    if (!e.both) e.line.setAttribute("marker-end", `url(#${on ? L.aidB : L.aid})`);
+    if (e.both && on) {
+      const one = blocked.has(a + ">" + b) !== blocked.has(b + ">" + a);
+      if (one) {
+        const fwd = blocked.has(a + ">" + b);
+        e.line.setAttribute(fwd ? "marker-end" : "marker-start", `url(#${L.aidB})`);
+        e.line.removeAttribute(fwd ? "marker-start" : "marker-end");
+      } else { e.line.removeAttribute("marker-end"); e.line.removeAttribute("marker-start"); }
+    } else if (e.both) { e.line.removeAttribute("marker-end"); e.line.removeAttribute("marker-start"); }
+  }
+}
+function markRoles(L, start, goal, req) {
+  L.gT.innerHTML = "";
+  for (const [id, n] of L.nodes) n.g.classList.remove("is-start", "is-goal", "is-req");
+  const tag = (id, txt, cls, dy) => {
+    if (!L.nodes.has(id)) return;
+    const [x, y] = L.G.pos[id];
+    const t = E("text", { x, y: y - L.R - 12 - dy, class: "m-tag " + cls }, L.gT);
+    t.textContent = txt;
+  };
+  if (start) { L.nodes.get(start)?.g.classList.add("is-start"); tag(start, "start", "start", 0); }
+  if (goal) { L.nodes.get(goal)?.g.classList.add("is-goal"); tag(goal, start === goal ? "start · goal" : "goal", "goal", 0); }
+  if (req) { L.nodes.get(req)?.g.classList.add("is-req"); tag(req, "pickup", "req", (req === start || req === goal) ? 14 : 0); }
+}
+function clearSearch(L) {
+  L.gR.innerHTML = "";
+  for (const [, n] of L.nodes) { n.ringF.classList.remove("on"); n.ringT.classList.remove("on"); n.g.classList.remove("cur"); }
+}
+function drawRoute(L, path, animate) {
+  L.gR.innerHTML = "";
+  if (!path.length) return null;
+  const pts = path.map(s => L.G.pos[s.n].join(",")).join(" ");
+  E("polyline", { points: pts, class: "m-route-glow" }, L.gR);
+  const pl = E("polyline", { points: pts, class: "m-route" }, L.gR);
+  if (animate && !reduceMotion) {
+    const len = pl.getTotalLength ? pl.getTotalLength() : 2000;
+    pl.style.setProperty("--len", len);
+    pl.classList.add("draw");
+  }
+  return pl;
+}
+
+/* ---------- 01 hero ---------- */
+const hero = (() => {
+  const L = drawMap($("heroMap"), G2);
+  const [s, gl, , req] = DATA.g2.tasks[2];
+  const r = search(G2, s, gl, chooseH(G2, gl, 80).h, req, new Set());
+  markRoles(L, s, gl, req);
+  const pl = drawRoute(L, r.path, true);
+  const halo = E("circle", { r: 16, class: "m-agent-halo" }, L.gR);
+  const dot = E("circle", { r: 7, class: "m-agent" }, L.gR);
+  const legs = r.path.length - 1;
+  $("ticket").innerHTML = `<span class="ttl">Work order · Task 3</span><span>route</span><b>${s} → ${gl}</b><span>pickup</span><b>${req}</b><span>closed</span><b>none</b><span>result</span><b>${r.cost} min · ${legs} legs</b>`;
+  const total = pl.getTotalLength();
+  const place = t => { const p = pl.getPointAtLength(t * total); dot.setAttribute("cx", p.x); dot.setAttribute("cy", p.y); halo.setAttribute("cx", p.x); halo.setAttribute("cy", p.y); };
+  place(reduceMotion ? 1 : 0);
+  return { frame(now) { if (reduceMotion) return; const t = ((now / 7000) % 1); place(t < .85 ? (t / .85) : 1); } };
+})();
+
+/* ---------- 02 graph1 ---------- */
+(() => {
+  const box = $("g1Tasks");
+  const L = drawMap($("g1Map"), G1, { r: 20 });
+  const labels = ["S → G", "S → G · closed C>G", "S → G · via C", "S → G · via B", "S → G · closed A>G;B>G;C>G", "G → S", "S → C"];
+  const show = i => {
+    const [s, g, bl, req] = DATA.g1.tasks[i];
+    const blocked = parseBlocked(bl);
+    [...box.children].forEach((b, j) => b.setAttribute("aria-pressed", j === i ? "true" : "false"));
+    setBlocked(L, blocked); markRoles(L, s, g, req || null); clearSearch(L);
+    const r = search(G1, s, g, zeroH, req || null, blocked);
+    drawRoute(L, r.path, true);
+    $("g1Result").innerHTML = r.ok
+      ? `<b>Task ${i + 1}</b> · UCS · <span class="good">${r.cost} min</span> · ${r.expanded} states expanded<br>${fmtPath(r.path)}`
+      : `<b>Task ${i + 1}</b> · UCS · <span class="bad">NO_FEASIBLE_ROUTE</span> · ${r.expanded} states expanded<br>${g === "S" ? "No edge leaves G: every edge is one-way." : "Every way into G is closed."}`;
+  };
+  labels.forEach((t, i) => {
+    const b = document.createElement("button");
+    b.className = "tbtn"; b.type = "button"; b.textContent = t;
+    b.addEventListener("click", () => show(i));
+    box.appendChild(b);
+  });
+  show(2);
+})();
+
+/* ---------- 04 two-layer state space ---------- */
+const stage = (() => {
+  const svg = $("stage3d");
+  const S = { yaw: -0.5, pitch: 1.02, sway: 0, drag: null, idleUntil: 0 };
+  const C = { x: 490, y: 190 }, LH = 112, FOC = 1700;
+  const r = search(G3, "Entrance", "Lab", zeroH, "Kitchen", new Set());
+  const route = r.path;
+  const gs = [0];
+  for (let i = 1; i < route.length; i++) {
+    const e = G3.adj.get(route[i - 1].n).filter(x => x[1] === route[i].n).reduce((m, x) => Math.min(m, x[2]), Infinity);
+    gs.push(gs[i - 1] + e);
+  }
+  const P = (x, y, z) => {
+    x -= C.x; y -= C.y;
+    const yaw = S.yaw + S.sway;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    const X = x * cy - y * sy, Y = x * sy + y * cy;
+    const cp = Math.cos(S.pitch), sp = Math.sin(S.pitch);
+    const Ys = Y * cp - z * sp, D = Y * sp + z * cp;
+    const s = FOC / (FOC - D);
+    return [X * s, Ys * s + 10, s];
+  };
+  const zOf = fl => fl ? LH : -LH;
+  const at = (n, fl) => { const [x, y] = G3.pos[n]; return P(x, y, zOf(fl)); };
+  let prog = reduceMotion ? route.length - 1 : 0;
+  const f2 = v => v.toFixed(1);
+  function layer(fl, out) {
+    const c = fl ? "t" : "f", z = zOf(fl);
+    const corners = [[-30, -40], [1010, -40], [1010, 400], [-30, 400]].map(([x, y]) => P(x, y, z));
+    out.push(`<polygon class="p-plane ${c}" points="${corners.map(p => f2(p[0]) + "," + f2(p[1])).join(" ")}"/>`);
+    const lp = corners[3];
+    out.push(`<text class="p-layer ${c}" x="${f2(lp[0] + 8)}" y="${f2(lp[1] - 10)}">visited_required = ${fl ? "True" : "False"}</text>`);
+    for (const [a, b] of G3.edges) {
+      const p = at(a, fl), q = at(b, fl);
+      out.push(`<line class="p-edge ${c}" x1="${f2(p[0])}" y1="${f2(p[1])}" x2="${f2(q[0])}" y2="${f2(q[1])}" stroke-width="${f2(1.6 * p[2])}"/>`);
+    }
+    for (const id of G3.ids) {
+      const p = at(id, fl);
+      out.push(`<circle class="p-node ${c}" cx="${f2(p[0])}" cy="${f2(p[1])}" r="${f2(7 * p[2])}" stroke-width="2"/>`);
+      out.push(`<text class="p-name" x="${f2(p[0])}" y="${f2(p[1] + 21 * p[2])}" font-size="${f2(12 * p[2])}" opacity="${fl ? 1 : .7}">${id}</text>`);
+    }
+  }
+  function render() {
+    const out = [];
+    layer(false, out);
+    for (const id of G3.ids) {
+      const p = at(id, false), q = at(id, true);
+      out.push(`<line class="p-stem" x1="${f2(p[0])}" y1="${f2(p[1])}" x2="${f2(q[0])}" y2="${f2(q[1])}"/>`);
+    }
+    layer(true, out);
+    const k = Math.floor(prog), fr = prog - k;
+    const pts = [];
+    for (let i = 0; i <= Math.min(k, route.length - 1); i++) pts.push(at(route[i].n, route[i].fl));
+    let head = pts[pts.length - 1];
+    if (k < route.length - 1) {
+      const a = route[k], b = route[k + 1];
+      const [ax, ay] = G3.pos[a.n], [bx, by] = G3.pos[b.n];
+      head = P(ax + (bx - ax) * fr, ay + (by - ay) * fr, zOf(a.fl) + (zOf(b.fl) - zOf(a.fl)) * fr);
+      pts.push(head);
+    }
+    const sw = 4.5;
+    out.push(`<polyline class="p-route" stroke-width="${sw * 3}" stroke-opacity=".22" points="${pts.map(p => f2(p[0]) + "," + f2(p[1])).join(" ")}"/>`);
+    out.push(`<polyline class="p-route" stroke-width="${sw}" points="${pts.map(p => f2(p[0]) + "," + f2(p[1])).join(" ")}"/>`);
+    const jumpIdx = route.findIndex((s, i) => i > 0 && s.fl && !route[i - 1].fl);
+    if (jumpIdx > 0) {
+      const kf = at(route[jumpIdx].n, false), kt = at(route[jumpIdx].n, true);
+      out.push(`<line class="p-jump" x1="${f2(kf[0])}" y1="${f2(kf[1])}" x2="${f2(kt[0])}" y2="${f2(kt[1])}" stroke-width="2.5"/>`);
+    }
+    out.push(`<circle cx="${f2(head[0])}" cy="${f2(head[1])}" r="${f2(15 * head[2])}" fill="var(--amber)" opacity=".25"/>`);
+    out.push(`<circle cx="${f2(head[0])}" cy="${f2(head[1])}" r="${f2(7 * head[2])}" fill="var(--amber)"/>`);
+    const lf = at("Lab", false), lt = at("Lab", true);
+    out.push(`<text class="p-tag f" x="${f2(lf[0])}" y="${f2(lf[1] - 18 * lf[2])}">(Lab, False) g=9</text>`);
+    if (k >= route.length - 1) out.push(`<text class="p-tag t" x="${f2(lt[0])}" y="${f2(lt[1] - 18 * lt[2])}">(Lab, True) g=12 ✓</text>`);
+    svg.innerHTML = out.join("");
+    const cur = route[Math.min(k, route.length - 1)];
+    const st = $("r3state");
+    st.textContent = `(${cur.n}, ${cur.fl ? "True" : "False"})`;
+    st.className = cur.fl ? "flag-t" : "flag-f";
+    $("r3g").textContent = gs[Math.min(k, route.length - 1)] + (k >= route.length - 1 ? "  ✓ goal" : "");
+  }
+  const el = $("stage");
+  el.addEventListener("pointerdown", e => { S.drag = { x: e.clientX, y: e.clientY }; el.setPointerCapture(e.pointerId); });
+  el.addEventListener("pointermove", e => {
+    if (!S.drag) return;
+    S.yaw += (e.clientX - S.drag.x) * 0.006;
+    S.pitch = Math.max(0.2, Math.min(1.42, S.pitch - (e.clientY - S.drag.y) * 0.005));
+    S.drag = { x: e.clientX, y: e.clientY };
+    S.idleUntil = performance.now() + 5000;
+    render();
+  });
+  const end = () => { S.drag = null; };
+  el.addEventListener("pointerup", end); el.addEventListener("pointercancel", end);
+  render();
+  let last = 0, hold = 0;
+  return {
+    frame(now) {
+      if (reduceMotion) return;
+      const dt = last ? Math.min(64, now - last) : 16; last = now;
+      if (now > S.idleUntil && !S.drag) S.sway = Math.sin(now / 4200) * 0.22;
+      if (prog < route.length - 1) prog = Math.min(route.length - 1, prog + dt / 850);
+      else { hold += dt; if (hold > 3200) { hold = 0; prog = 0; } }
+      render();
+    },
+    reset() { last = 0; }
+  };
+})();
+
+/* ---------- 06 race ---------- */
+let VMAX = 80;
+const race = (() => {
+  const st = { start: "Gate", goal: "Workshop", req: "Canteen", blocked: new Set(), step: 0, playing: false, acc: 0, U: null, A: null, hc: null };
+  const onEdge = p => {
+    const ab = p.a + ">" + p.b, ba = p.b + ">" + p.a;
+    if (st.blocked.has(ab) || st.blocked.has(ba)) { st.blocked.delete(ab); st.blocked.delete(ba); }
+    else { if (G2.adj.get(p.a).some(e => e[1] === p.b)) st.blocked.add(ab); if (G2.adj.get(p.b).some(e => e[1] === p.a)) st.blocked.add(ba); }
+    $("rTask").value = "custom"; run(true);
+  };
+  const LU = drawMap($("uMap"), G2, { onEdge }), LA = drawMap($("aMap"), G2, { onEdge });
+  const sel = (id, opts, none) => {
+    const s = $(id); s.innerHTML = (none ? `<option value="">none</option>` : "") + opts.map(o => `<option value="${o}">${o}</option>`).join("");
+  };
+  sel("rStart", G2.ids); sel("rGoal", G2.ids); sel("rReq", G2.ids, true);
+  $("rTask").innerHTML = DATA.g2.tasks.map((t, i) => `<option value="${i}">Task ${i + 1} · ${t[0]} → ${t[1]}${t[3] ? " via " + t[3] : ""}${t[2] ? " · closed" : ""}</option>`).join("") + `<option value="custom">Custom request</option>`;
+  $("rTask").value = "2";
+  const loadTask = i => { const [s, g, bl, req] = DATA.g2.tasks[i]; st.start = s; st.goal = g; st.req = req || null; st.blocked = parseBlocked(bl); };
+  const syncControls = () => {
+    $("rStart").value = st.start; $("rGoal").value = st.goal; $("rReq").value = st.req || "";
+    const box = $("rBlocked");
+    box.innerHTML = st.blocked.size ? "" : `<span class="none">none</span>`;
+    for (const b of st.blocked) {
+      const c = document.createElement("button");
+      c.type = "button"; c.className = "chip"; c.textContent = b.replace(">", " → ") + "  ×";
+      c.setAttribute("aria-label", "Reopen " + b);
+      c.addEventListener("click", () => { st.blocked.delete(b); $("rTask").value = "custom"; run(true); });
+      box.appendChild(c);
+    }
+  };
+  const foot = (r, i, label) => {
+    if (i < r.trace.length && !(i === r.trace.length - 1 && r.ok)) {
+      const t = r.trace[Math.max(0, i)];
+      return `<span class="cur">expanding</span> <b>(${t.n}, ${t.fl ? "True" : "False"})</b> · g ${+t.g.toFixed(2)} · f ${+t.f.toFixed(2)}`;
+    }
+    return r.ok ? `<b style="color:var(--amber)">${r.cost} min</b> · ${r.expanded} expanded<br>${fmtPath(r.path)}`
+                : `<b style="color:var(--coral)">NO_FEASIBLE_ROUTE</b> · ${r.expanded} expanded<br>No route satisfies the closures and the stop.`;
+  };
+  function paint() {
+    const i = st.step;
+    for (const [L, r, cId, fId] of [[LU, st.U, "uCount", "uFoot"], [LA, st.A, "aCount", "aFoot"]]) {
+      clearSearch(L);
+      const n = Math.min(i, r.trace.length);
+      for (let j = 0; j < n; j++) {
+        const t = r.trace[j], node = L.nodes.get(t.n);
+        (t.fl ? node.ringT : node.ringF).classList.add("on");
+        if (j === n - 1 && n < r.trace.length) node.g.classList.add("cur");
+      }
+      if (n >= r.trace.length && r.ok) drawRoute(L, r.path, false);
+      $(cId).innerHTML = `${n}<small>expanded</small>`;
+      $(fId).innerHTML = n === 0 ? `<span class="cur">ready · press Replay or Step</span>` : foot(r, n - 1);
+    }
+  }
+  function run(autoplay) {
+    st.hc = chooseH(G2, st.goal, VMAX);
+    st.U = search(G2, st.start, st.goal, zeroH, st.req, st.blocked);
+    st.A = search(G2, st.start, st.goal, st.hc.h, st.req, st.blocked);
+    for (const L of [LU, LA]) { setBlocked(L, st.blocked); markRoles(L, st.start, st.goal, st.req); }
+    const chip = $("aChip");
+    if (st.hc.mode === "euclid") { chip.textContent = `h = dist / ${VMAX}`; chip.className = "chip"; }
+    else { chip.textContent = `h = 0 · ${st.hc.fast.length} edges > ${VMAX} m/min`; chip.className = "chip warn"; }
+    syncControls();
+    st.step = 0; st.acc = 0; st.playing = !!autoplay && !reduceMotion;
+    if (reduceMotion && autoplay) st.step = Infinity;
+    paint();
+  }
+  const maxSteps = () => Math.max(st.U.trace.length, st.A.trace.length);
+  $("rTask").addEventListener("change", e => { if (e.target.value !== "custom") { loadTask(+e.target.value); run(true); } });
+  $("rStart").addEventListener("change", e => { st.start = e.target.value; $("rTask").value = "custom"; run(true); });
+  $("rGoal").addEventListener("change", e => { st.goal = e.target.value; $("rTask").value = "custom"; run(true); });
+  $("rReq").addEventListener("change", e => { st.req = e.target.value || null; $("rTask").value = "custom"; run(true); });
+  $("rPlay").addEventListener("click", () => { st.step = 0; st.acc = 0; st.playing = !reduceMotion; if (reduceMotion) st.step = Infinity; paint(); });
+  $("rStep").addEventListener("click", () => { st.playing = false; st.step = Math.min(maxSteps(), (st.step === Infinity ? 0 : st.step) + 1); paint(); });
+  loadTask(2); run(false);
+  let last = 0, armed = true;
+  return {
+    frame(now) {
+      const dt = last ? Math.min(64, now - last) : 16; last = now;
+      if (!st.playing) return;
+      st.acc += dt;
+      if (st.acc > 520) { st.acc = 0; st.step++; paint(); if (st.step >= maxSteps()) st.playing = false; }
+    },
+    enter() { last = 0; if (armed) { armed = false; st.step = 0; st.playing = !reduceMotion; if (reduceMotion) st.step = Infinity; paint(); } },
+    refresh() { run(false); }
+  };
+})();
+
+/* ---------- 07 heuristic chart ---------- */
+const corridors = (() => {
+  const seen = new Map();
+  for (const [a, b, w] of G2.edges) {
+    const k = a < b ? a + "~" + b : b + "~" + a;
+    if (!seen.has(k)) seen.set(k, { a, b, w, d: dist(G2, a, b), v: dist(G2, a, b) / w });
+  }
+  return [...seen.values()].sort((x, y) => y.v - x.v);
+})();
+const speedChart = (() => {
+  const svg = $("speedChart");
+  const W = 640, left = 190, right = 40, top = 22, rowH = 21, H = top + corridors.length * rowH + 26;
+  const max = 160, x = v => left + (v / max) * (W - left - right);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const out = [];
+  for (const t of [0, 40, 80, 120, 160]) {
+    out.push(`<line class="ax-line" x1="${x(t)}" x2="${x(t)}" y1="${top - 6}" y2="${H - 22}"/>`);
+    out.push(`<text class="ax" x="${x(t)}" y="${H - 6}" text-anchor="middle">${t}</text>`);
+  }
+  corridors.forEach((c, i) => {
+    const y = top + i * rowH;
+    out.push(`<g data-tip="<b>${c.a} ⇄ ${c.b}</b><br>${c.d.toFixed(1)} m in ${c.w} min<br>= ${c.v.toFixed(1)} m/min">`);
+    out.push(`<rect x="${left - 186}" y="${y}" width="${W - left + 186 - right + 36}" height="${rowH}" fill="transparent"/>`);
+    out.push(`<text class="bar-l" x="${left - 10}" y="${y + rowH / 2 + 4}">${c.a} ⇄ ${c.b}</text>`);
+    out.push(`<rect class="bar" data-i="${i}" x="${left}" y="${y + 4}" width="${Math.max(2, x(c.v) - left)}" height="${rowH - 8}" rx="3"/>`);
+    out.push(`<text class="bar-v" data-v="${i}" x="${x(c.v) + 6}" y="${y + rowH / 2 + 4}">${c.v.toFixed(1)}</text>`);
+    out.push(`</g>`);
+  });
+  out.push(`<line class="vline" id="vline" x1="0" x2="0" y1="${top - 10}" y2="${H - 22}"/>`);
+  out.push(`<text class="vlabel" id="vlabel" x="0" y="${top - 12}" text-anchor="middle"></text>`);
+  svg.innerHTML = out.join("");
+  return {
+    update(v) {
+      const vx = x(v);
+      $("vline").setAttribute("x1", vx); $("vline").setAttribute("x2", vx);
+      const lab = $("vlabel"); lab.setAttribute("x", vx); lab.textContent = `v_max ${v}`;
+      corridors.forEach((c, i) => {
+        const over = c.v > v + 1e-9;
+        svg.querySelector(`[data-i="${i}"]`).classList.toggle("over", over);
+        const t = svg.querySelector(`[data-v="${i}"]`);
+        t.classList.toggle("over", over);
+        t.textContent = c.v.toFixed(1) + (over ? "  too fast" : "");
+      });
+    }
+  };
+})();
+function updateVmax(v) {
+  VMAX = v;
+  $("vmaxVal").innerHTML = `${v}<small>m/min</small>`;
+  speedChart.update(v);
+  let u = 0, a = 0, mode = "euclid", fast = 0;
+  for (const [s, g, bl, req] of DATA.g2.tasks) {
+    const blocked = parseBlocked(bl), hc = chooseH(G2, g, v);
+    mode = hc.mode; fast = hc.fast.length;
+    u += search(G2, s, g, zeroH, req || null, blocked).expanded;
+    a += search(G2, s, g, hc.h, req || null, blocked).expanded;
+  }
+  $("hU").textContent = u; $("hA").textContent = a;
+  const chip = $("hStatus");
+  if (mode === "euclid") { chip.className = "chip ok"; chip.textContent = `✓ all 34 edges respect v_max · Euclidean h in use`; }
+  else { chip.className = "chip warn"; chip.textContent = `⚠ ${fast} edges faster than ${v} m/min · A* falls back to h = 0`; }
+  race.refresh();
+}
+$("vmax").addEventListener("input", e => updateVmax(+e.target.value));
+updateVmax(80);
+
+/* ---------- 09 dumbbell ---------- */
+(() => {
+  const svg = $("dumbChart");
+  const rows = DATA.g2.tasks.map(([s, g, bl, req], i) => {
+    const blocked = parseBlocked(bl), hc = chooseH(G2, g, 80);
+    const u = search(G2, s, g, zeroH, req || null, blocked), a = search(G2, s, g, hc.h, req || null, blocked);
+    const extra = [req ? "via " + req : "", bl ? "closed " + bl.split(";").join(", ") : ""].filter(Boolean).join(" · ");
+    return { name: `${s} → ${g}`, extra, u: u.expanded, a: a.expanded, cost: u.cost, i };
+  });
+  const W = 640, left = 236, right = 40, top = 14, rowH = 50, H = top + rows.length * rowH + 30;
+  const max = 20, x = v => left + (v / max) * (W - left - right);
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  const out = [];
+  for (const t of [0, 5, 10, 15, 20]) {
+    out.push(`<line class="ax-line" x1="${x(t)}" x2="${x(t)}" y1="${top}" y2="${H - 26}"/>`);
+    out.push(`<text class="ax" x="${x(t)}" y="${H - 8}" text-anchor="middle">${t}</text>`);
+  }
+  rows.forEach((r, i) => {
+    const y = top + i * rowH + rowH / 2;
+    out.push(`<g class="d-row" data-tip="<b>Task ${r.i + 1} · ${r.name}</b><br>${r.extra || "no constraints"}<br>cost ${r.cost} min (both)<br>UCS ${r.u} · A* ${r.a} expanded">`);
+    out.push(`<rect class="d-hit" x="0" y="${y - rowH / 2}" width="${W}" height="${rowH}"/>`);
+    out.push(`<text class="d-lab" x="0" y="${y - 3}">Task ${r.i + 1} · ${r.name}</text>`);
+    out.push(`<text class="d-sub" x="0" y="${y + 14}">${r.extra || "no constraints"}</text>`);
+    if (r.u !== r.a) out.push(`<line class="d-line" x1="${x(r.a)}" x2="${x(r.u)}" y1="${y}" y2="${y}"/>`);
+    out.push(`<circle class="d-u" cx="${x(r.u)}" cy="${y}" r="7"/>`);
+    out.push(`<circle class="d-s" cx="${x(r.a)}" cy="${y}" r="${r.u === r.a ? 4.5 : 7}"/>`);
+    if (r.u === r.a) out.push(`<text class="d-val" x="${x(r.u) + 12}" y="${y + 4}">${r.u} = ${r.a}</text>`);
+    else {
+      out.push(`<text class="d-val" x="${x(r.u) + 12}" y="${y + 4}">${r.u}</text>`);
+      out.push(`<text class="d-val" x="${x(r.a) - 12}" y="${y + 4}" text-anchor="end">${r.a}</text>`);
+    }
+    out.push(`</g>`);
+  });
+  svg.innerHTML = out.join("");
+})();
+
+/* ---------- 12 tests ---------- */
+(() => {
+  const files = [["test_search", 55, "optimal costs, A* h=0 ≡ UCS, revisits"], ["test_edge_cases", 39, "our custom trap maps"], ["test_loader", 29, "CSV parsing and the 8 invalid files"], ["test_cli", 12, "exit codes and output"], ["test_gui", 12, "API and live server, replay length"], ["test_heuristics", 6, "admissible, consistent, fallback"], ["test_architecture", 4, "module boundaries"], ["test_benchmarks", 2, "costs agree across variants"]];
+  const max = Math.max(...files.map(f => f[1]));
+  $("testBars").innerHTML = files.map(([n, c, why]) =>
+    `<div class="tbar" data-tip="<b>tests/${n}.py</b><br>${c} tests · ${why}"><span>${n}</span><span class="tr"><i style="width:${(c / max * 100).toFixed(1)}%"></i></span><b>${c}</b></div>`).join("");
+})();
+
+/* ---------- tooltip ---------- */
+(() => {
+  const tip = $("tip");
+  document.addEventListener("pointermove", e => {
+    const t = e.target.closest && e.target.closest("[data-tip]");
+    if (!t) { tip.classList.remove("on"); return; }
+    tip.innerHTML = t.getAttribute("data-tip");
+    const w = tip.offsetWidth, h = tip.offsetHeight;
+    let lx = e.clientX + 14, ly = e.clientY + 14;
+    if (lx + w > innerWidth - 8) lx = e.clientX - w - 14;
+    if (ly + h > innerHeight - 8) ly = e.clientY - h - 14;
+    tip.style.left = lx + "px"; tip.style.top = ly + "px";
+    tip.classList.add("on");
+  });
+  document.addEventListener("pointerleave", () => tip.classList.remove("on"));
+})();
+
+/* ---------- navigation ---------- */
+(() => {
+  const scenes = [...document.querySelectorAll(".scene")];
+  const list = $("stations");
+  const links = scenes.map((s, i) => {
+    const li = document.createElement("li");
+    const a = document.createElement("a");
+    a.href = "#" + s.id;
+    a.innerHTML = `<span class="dot"></span><span class="rno">${String(i + 1).padStart(2, "0")}</span><span>${s.dataset.station}</span>`;
+    li.appendChild(a); list.appendChild(li);
+    return a;
+  });
+  let cur = 0;
+  const visible = new Set();
+  const runners = { start: hero, state: stage, race };
+  const setCur = i => {
+    if (i === cur && links[i].classList.contains("here")) return;
+    cur = i;
+    links.forEach((a, j) => { a.classList.toggle("here", j === i); a.classList.toggle("past", j < i); });
+    $("count").innerHTML = `<b>${String(i + 1).padStart(2, "0")}</b> / ${scenes.length}`;
+    const first = links[0].getBoundingClientRect(), now = links[i].getBoundingClientRect();
+    $("railProgress").style.height = (now.top - first.top) + "px";
+    try { history.replaceState(null, "", "#" + scenes[i].id); } catch (e) {}
+    const r = runners[scenes[i].id];
+    if (r && r.enter) r.enter();
+  };
+  const io = new IntersectionObserver(entries => {
+    for (const e of entries) { if (e.isIntersecting) visible.add(e.target.id); else visible.delete(e.target.id); }
+  }, { threshold: 0.01 });
+  scenes.forEach(s => io.observe(s));
+  const pick = () => {
+    const mid = innerHeight * 0.42;
+    let best = 0;
+    scenes.forEach((s, i) => { if (s.getBoundingClientRect().top <= mid) best = i; });
+    setCur(best);
+  };
+  addEventListener("scroll", pick, { passive: true });
+  addEventListener("resize", pick);
+  const go = i => { i = Math.max(0, Math.min(scenes.length - 1, i)); scenes[i].scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" }); };
+  $("prevBtn").addEventListener("click", () => go(cur - 1));
+  $("nextBtn").addEventListener("click", () => go(cur + 1));
+  const fs = () => {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else document.documentElement.requestFullscreen().catch(() => {});
+    } catch (e) {}
+  };
+  $("fsBtn").addEventListener("click", fs);
+  addEventListener("keydown", e => {
+    const tag = (e.target.tagName || "").toLowerCase();
+    if (["input", "select", "textarea"].includes(tag) || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (["ArrowDown", "ArrowRight", "PageDown"].includes(e.key) || (e.key === " " && tag !== "button")) { e.preventDefault(); go(cur + 1); }
+    else if (["ArrowUp", "ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); go(cur - 1); }
+    else if (e.key === "Home") { e.preventDefault(); go(0); }
+    else if (e.key === "End") { e.preventDefault(); go(scenes.length - 1); }
+    else if (e.key === "f" || e.key === "F") fs();
+  });
+  const hashIdx = scenes.findIndex(s => "#" + s.id === location.hash);
+  if (hashIdx > 0) scenes[hashIdx].scrollIntoView({ block: "start" });
+  setTimeout(pick, 60);
+  const loop = now => {
+    if (visible.has("start")) hero.frame(now);
+    if (visible.has("state")) stage.frame(now); else stage.reset();
+    if (visible.has("race")) race.frame(now);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+})();
+</script>
+
+</body></html>
